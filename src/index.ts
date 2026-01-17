@@ -2,14 +2,28 @@
  * Alpaca API TypeScript Client
  * 
  * This module provides TypeScript types and utilities for the Alpaca Markets API.
- * The types are automatically generated from the official OpenAPI specification.
+ * The types are automatically generated from the official OpenAPI specifications.
  * 
  * @see https://docs.alpaca.markets/
  */
 
-// Export generated types
+// Export generated types from all API schemas
 // To generate types, run: bun run generate
-export type { paths, components } from './types/alpaca';
+
+// Trading API types
+export type { paths as TradingPaths, components as TradingComponents } from './types/trading-api';
+
+// Market Data API types
+export type { paths as MarketDataPaths, components as MarketDataComponents } from './types/market-data-api';
+
+// Broker API types
+export type { paths as BrokerPaths, components as BrokerComponents } from './types/broker-api';
+
+// AuthX API types
+export type { paths as AuthXPaths, components as AuthXComponents } from './types/authx';
+
+// Re-export trading API types as default for backward compatibility
+export type { paths, components } from './types/trading-api';
 
 /**
  * Base configuration for Alpaca API client

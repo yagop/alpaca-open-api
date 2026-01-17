@@ -6,7 +6,7 @@
   "types": "dist/index.d.ts",
   "scripts": {
     "generate": "bun run generate:types",
-    "generate:types": "bunx openapi-typescript https://docs.alpaca.markets/openapi -o src/types/alpaca.ts",
+    "generate:types": "bunx openapi-typescript https://docs.alpaca.markets/openapi/authx.yaml -o src/types/authx.ts && bunx openapi-typescript https://docs.alpaca.markets/openapi/broker-api.json -o src/types/broker-api.ts && bunx openapi-typescript https://docs.alpaca.markets/openapi/market-data-api.json -o src/types/market-data-api.ts && bunx openapi-typescript https://docs.alpaca.markets/openapi/trading-api.json -o src/types/trading-api.ts",
     "build": "bun run generate && bun build src/index.ts --outdir dist --target node",
     "dev": "bun run --watch src/index.ts"
   },

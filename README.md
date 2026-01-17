@@ -64,7 +64,11 @@ bun install
 bun run generate
 ```
 
-This will fetch the latest OpenAPI specification from Alpaca and generate TypeScript types in `src/types/alpaca.ts`.
+This will fetch the latest OpenAPI specifications from Alpaca and generate TypeScript types:
+- `src/types/trading-api.ts` - Trading API types
+- `src/types/market-data-api.ts` - Market Data API types
+- `src/types/broker-api.ts` - Broker API types
+- `src/types/authx.ts` - AuthX API types
 
 ## Usage
 
@@ -95,14 +99,22 @@ console.log('Positions:', positions);
 The generated types provide full type safety for all API endpoints:
 
 ```typescript
-import type { paths, components } from 'alpaca-api-ts';
+import type { TradingComponents, MarketDataComponents } from 'alpaca-api-ts';
 
 // Use generated types for request/response
-type Account = components['schemas']['Account'];
-type Order = components['schemas']['Order'];
+type Account = TradingComponents['schemas']['Account'];
+type Order = TradingComponents['schemas']['Order'];
 
 // Make type-safe requests
 const account: Account = await client.get('/v2/account');
+```
+
+You can also use the default `components` export for backward compatibility (maps to Trading API):
+
+```typescript
+import type { components } from 'alpaca-api-ts';
+
+type Account = components['schemas']['Account'];
 ```
 
 ## Examples
@@ -157,12 +169,16 @@ The OpenAPI types are generated using [openapi-typescript](https://github.com/dr
 bun run generate
 ```
 
-This will fetch the latest OpenAPI specification from `https://docs.alpaca.markets/openapi` and generate TypeScript types.
+This will fetch the latest OpenAPI specifications from Alpaca and generate TypeScript types for all APIs:
+- Trading API: `https://docs.alpaca.markets/openapi/trading-api.json`
+- Market Data API: `https://docs.alpaca.markets/openapi/market-data-api.json`
+- Broker API: `https://docs.alpaca.markets/openapi/broker-api.json`
+- AuthX API: `https://docs.alpaca.markets/openapi/authx.yaml`
 
 ## Scripts
 
-- `bun run generate` - Generate TypeScript types from OpenAPI spec
-- `bun run build` - Build the project
+- `bun run generate` - Generate TypeScript types from all OpenAPI specs
+- `bun run build` - Generate types and build the project
 - `bun run dev` - Run in development mode with auto-reload
 
 ## Contributing
@@ -176,7 +192,11 @@ MIT License - see [LICENSE](LICENSE) file for details.
 ## Resources
 
 - [Alpaca Markets API Documentation](https://docs.alpaca.markets/)
-- [Alpaca Markets OpenAPI Specification](https://docs.alpaca.markets/openapi)
+- [Alpaca Markets OpenAPI Specifications](https://docs.alpaca.markets/openapi)
+  - [Trading API](https://docs.alpaca.markets/openapi/trading-api.json)
+  - [Market Data API](https://docs.alpaca.markets/openapi/market-data-api.json)
+  - [Broker API](https://docs.alpaca.markets/openapi/broker-api.json)
+  - [AuthX API](https://docs.alpaca.markets/openapi/authx.yaml)
 - [Bun Documentation](https://bun.sh/docs)
 - [openapi-typescript](https://github.com/drwpow/openapi-typescript)
 
