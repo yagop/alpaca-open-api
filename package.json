@@ -1,0 +1,32 @@
+{
+  "name": "alpaca-api-ts",
+  "version": "0.1.0",
+  "description": "TypeScript client for Alpaca Markets API generated from OpenAPI specification",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "scripts": {
+    "generate": "bun run generate:types",
+    "generate:types": "bunx openapi-typescript https://docs.alpaca.markets/openapi -o src/types/alpaca.ts",
+    "build": "bun build src/index.ts --outdir dist --target node",
+    "dev": "bun run --watch src/index.ts"
+  },
+  "keywords": [
+    "alpaca",
+    "alpaca-markets",
+    "trading",
+    "api",
+    "typescript",
+    "openapi",
+    "bun"
+  ],
+  "author": "Yago",
+  "license": "MIT",
+  "devDependencies": {
+    "openapi-typescript": "^7.4.2",
+    "@types/node": "^20.11.5"
+  },
+  "dependencies": {},
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}
