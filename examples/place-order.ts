@@ -13,7 +13,11 @@
  * ⚠️  This example uses paper trading by default. Always test with paper trading first!
  */
 
-import { AlpacaClient, type AlpacaConfig } from '../src/index';
+import { AlpacaClient, type AlpacaConfig, type components } from '../src/index';
+
+// Use types from the generated OpenAPI specification
+type Order = components['schemas']['Order'];
+type OrderRequest = components['schemas']['OrderRequest'];
 
 async function main() {
   // Check for required environment variables
@@ -40,15 +44,15 @@ async function main() {
     // Example 1: Place a market order
     console.log('📈 Example 1: Placing a market order for AAPL...\n');
     
-    const marketOrder = {
+    const marketOrder: OrderRequest = {
       symbol: 'AAPL',
-      qty: 1,
+      qty: '1',
       side: 'buy',
       type: 'market',
       time_in_force: 'day',
     };
 
-    const placedMarketOrder = await client.post('/v2/orders', marketOrder);
+    const placedMarketOrder = await client.post<Order>('/v2/orders', marketOrder);
     console.log('Market order placed:');
     console.log(`  Order ID: ${placedMarketOrder.id}`);
     console.log(`  Symbol: ${placedMarketOrder.symbol}`);
@@ -58,16 +62,16 @@ async function main() {
     // Example 2: Place a limit order
     console.log('📊 Example 2: Placing a limit order for TSLA...\n');
     
-    const limitOrder = {
+    const limitOrder: OrderRequest = {
       symbol: 'TSLA',
-      qty: 1,
+      qty: '1',
       side: 'buy',
       type: 'limit',
       time_in_force: 'day',
-      limit_price: 200, // Set your desired limit price
+      limit_price: '200', // Set your desired limit price
     };
 
-    const placedLimitOrder = await client.post('/v2/orders', limitOrder);
+    const placedLimitOrder = await client.post<Order>('/v2/orders', limitOrder);
     console.log('Limit order placed:');
     console.log(`  Order ID: ${placedLimitOrder.id}`);
     console.log(`  Symbol: ${placedLimitOrder.symbol}`);
@@ -78,7 +82,7 @@ async function main() {
     // Example 3: Get order status
     console.log('🔍 Example 3: Checking order status...\n');
     
-    const orderStatus = await client.get(`/v2/orders/${placedMarketOrder.id}`);
+    const orderStatus = await client.get<Order>(`/v2/orders/${placedMarketOrder.id}`);
     console.log('Order status:');
     console.log(`  Order ID: ${orderStatus.id}`);
     console.log(`  Status: ${orderStatus.status}`);
@@ -88,7 +92,7 @@ async function main() {
     // Example 4: Get all open orders
     console.log('📋 Example 4: Fetching all open orders...\n');
     
-    const openOrders = await client.get('/v2/orders?status=open');
+    const openOrders = await client.get<Order[]>('/v2/orders?status=open');
     console.log(`Open orders: ${openOrders.length}`);
     
     for (const order of openOrders) {
@@ -110,28 +114,28 @@ async function main() {
     // Example 6: Place a bracket order (advanced)
     console.log('🎯 Example 6: Placing a bracket order with take-profit and stop-loss...\n');
     
-    const bracketOrder = {
+    const bracketOrder: OrderRequest = {
       symbol: 'SPY',
-      qty: 1,
+      qty: '1',
       side: 'buy',
       type: 'market',
       time_in_force: 'day',
       order_class: 'bracket',
       take_profit: {
-        limit_price: 450, // Take profit at this price
+        limit_price: '450', // Take profit at this price
       },
       stop_loss: {
-        stop_price: 400, // Stop loss at this price
+        stop_price: '400', // Stop loss at this price
       },
     };
 
-    const placedBracketOrder = await client.post('/v2/orders', bracketOrder);
+    const placedBracketOrder = await client.post<Order>('/v2/orders', bracketOrder);
     console.log('Bracket order placed:');
     console.log(`  Order ID: ${placedBracketOrder.id}`);
     console.log(`  Symbol: ${placedBracketOrder.symbol}`);
     console.log(`  Status: ${placedBracketOrder.status}`);
-    console.log(`  Take Profit: $${bracketOrder.take_profit.limit_price}`);
-    console.log(`  Stop Loss: $${bracketOrder.stop_loss.stop_price}`);
+    console.log(`  Take Profit: $${bracketOrder.take_profit?.limit_price}`);
+    console.log(`  Stop Loss: $${bracketOrder.stop_loss?.stop_price}`);
     console.log();
 
     console.log('✅ All examples completed successfully!');

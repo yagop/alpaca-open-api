@@ -11,7 +11,12 @@
  * 2. Run: bun run examples/basic-usage.ts
  */
 
-import { AlpacaClient, type AlpacaConfig } from '../src/index';
+import { AlpacaClient, type AlpacaConfig, type components } from '../src/index';
+
+// Use types from the generated OpenAPI specification
+type Account = components['schemas']['Account'];
+type Position = components['schemas']['Position'];
+type Order = components['schemas']['Order'];
 
 async function main() {
   // Check for required environment variables
@@ -38,7 +43,7 @@ async function main() {
   try {
     // Get account information
     console.log('📊 Fetching account information...\n');
-    const account = await client.get('/v2/account');
+    const account = await client.get<Account>('/v2/account');
     
     console.log('Account Status:', account.status);
     console.log('Account Number:', account.account_number);
@@ -50,7 +55,7 @@ async function main() {
 
     // Get all positions
     console.log('📈 Fetching current positions...\n');
-    const positions = await client.get('/v2/positions');
+    const positions = await client.get<Position[]>('/v2/positions');
     
     if (Array.isArray(positions) && positions.length > 0) {
       console.log(`You have ${positions.length} open position(s):\n`);
@@ -69,7 +74,7 @@ async function main() {
 
     // Get recent orders
     console.log('📋 Fetching recent orders...\n');
-    const orders = await client.get('/v2/orders?limit=5&status=all');
+    const orders = await client.get<Order[]>('/v2/orders?limit=5&status=all');
     
     if (Array.isArray(orders) && orders.length > 0) {
       console.log(`Last ${orders.length} order(s):\n`);

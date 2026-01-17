@@ -75,7 +75,7 @@ export class AlpacaClient {
       throw new Error(`API request failed: ${response.status} ${response.statusText}`);
     }
 
-    return response.json();
+    return response.json() as Promise<T>;
   }
 
   /**
@@ -92,7 +92,7 @@ export class AlpacaClient {
       throw new Error(`API request failed: ${response.status} ${response.statusText}`);
     }
 
-    return response.json();
+    return response.json() as Promise<T>;
   }
 
   /**
@@ -108,7 +108,7 @@ export class AlpacaClient {
       throw new Error(`API request failed: ${response.status} ${response.statusText}`);
     }
 
-    return response.json();
+    return response.json() as Promise<T>;
   }
 
   /**
@@ -125,6 +125,6 @@ export class AlpacaClient {
       throw new Error(`API request failed: ${response.status} ${response.statusText}`);
     }
 
-    return response.json();
+    return response.json() as Promise<T>;
   }
 }

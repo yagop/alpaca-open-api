@@ -22,8 +22,8 @@
   "author": "Yago",
   "license": "MIT",
   "devDependencies": {
-    "openapi-typescript": "^7.4.2",
-    "@types/node": "^20.11.5"
+    "openapi-typescript": "latest",
+    "@types/node": "latest"
   },
   "dependencies": {},
   "engines": {
