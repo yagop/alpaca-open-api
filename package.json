@@ -7,7 +7,7 @@
   "scripts": {
     "generate": "bun run generate:types",
     "generate:types": "bunx openapi-typescript https://docs.alpaca.markets/openapi -o src/types/alpaca.ts",
-    "build": "bun build src/index.ts --outdir dist --target node",
+    "build": "bun run generate && bun build src/index.ts --outdir dist --target node",
     "dev": "bun run --watch src/index.ts"
   },
   "keywords": [
