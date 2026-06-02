@@ -1,15 +1,16 @@
 {
-  "name": "alpaca-api-ts",
+  "name": "open-alpaca-api",
   "version": "0.1.0",
-  "description": "TypeScript client for Alpaca Markets API generated from OpenAPI specification",
+  "private": true,
+  "description": "Monorepo for the Open Alpaca API TypeScript client and MCP server",
   "type": "module",
-  "main": "dist/index.js",
-  "types": "dist/index.d.ts",
+  "workspaces": [
+    "packages/*"
+  ],
   "scripts": {
-    "generate": "bun run generate:types",
-    "generate:types": "bunx openapi-typescript@7.13.0 https://docs.alpaca.markets/openapi/authx.yaml -o src/types/authx.ts && bunx openapi-typescript@7.13.0 https://docs.alpaca.markets/openapi/broker-api.json -o src/types/broker-api.ts && bunx openapi-typescript@7.13.0 https://docs.alpaca.markets/openapi/market-data-api.json -o src/types/market-data-api.ts && bunx openapi-typescript@7.13.0 https://docs.alpaca.markets/openapi/trading-api.json -o src/types/trading-api.ts",
-    "build": "bun run generate && bun build src/index.ts --outdir dist --target node",
-    "dev": "bun run --watch src/index.ts"
+    "generate": "bun run --filter '@open-alpaca-api/core' generate",
+    "build": "bun run --filter '@open-alpaca-api/core' build && bun run --filter '@open-alpaca-api/mcp' build",
+    "mcp": "bun run --filter '@open-alpaca-api/mcp' start"
   },
   "keywords": [
     "alpaca",
@@ -18,15 +19,15 @@
     "api",
     "typescript",
     "openapi",
+    "mcp",
     "bun"
   ],
   "author": "Yago",
   "license": "MIT",
   "devDependencies": {
-    "openapi-typescript": "7.13.0",
-    "@types/node": "latest"
+    "@types/node": "latest",
+    "typescript": "^5"
   },
-  "dependencies": {},
   "engines": {
     "node": ">=18.0.0"
   }

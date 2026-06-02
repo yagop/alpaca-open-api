@@ -139,10 +139,10 @@ vite.config.js.timestamp-*
 vite.config.ts.timestamp-*
 
 # Generated OpenAPI types
-src/types/authx.ts
-src/types/broker-api.ts
-src/types/market-data-api.ts
-src/types/trading-api.ts
+packages/core/src/types/authx.ts
+packages/core/src/types/broker-api.ts
+packages/core/src/types/market-data-api.ts
+packages/core/src/types/trading-api.ts
 
 # Bun
 bun.lockb

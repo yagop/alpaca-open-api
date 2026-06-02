@@ -22,18 +22,21 @@ jobs:
     - name: Install dependencies
       run: bun install
 
-    - name: Build project
+    - name: Build all packages (generates types + catalog, bundles the MCP CLI)
       run: bun run build
 
-    - name: Type check
-      run: bun x tsc --noEmit
+    - name: Type check (core)
+      run: bun x tsc --noEmit -p packages/core/tsconfig.json
 
-    - name: Type check examples
-      run: bun x tsc -p tsconfig.examples.json
+    - name: Type check examples (core)
+      run: bun x tsc --noEmit -p packages/core/tsconfig.examples.json
 
-    - name: Upload build artifacts
+    - name: Type check (mcp)
+      run: bun x tsc --noEmit -p packages/mcp/tsconfig.json
+
+    - name: Upload MCP build artifact
       uses: actions/upload-artifact@v4
       with:
-        name: dist
-        path: dist/
+        name: mcp-dist
+        path: packages/mcp/dist/
         retention-days: 7

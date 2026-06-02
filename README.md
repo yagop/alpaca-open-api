@@ -1,205 +1,155 @@
-# alpaca-api-ts
+# open-alpaca-api
 
-TypeScript client for the [Alpaca Markets](https://alpaca.markets/) API, with types automatically generated from the official OpenAPI specification.
+A TypeScript monorepo for the [Alpaca Markets](https://alpaca.markets/) API, with types and a runtime endpoint catalog generated from the official OpenAPI specifications — plus a ready-to-run MCP server.
 
-## Features
+## Packages
 
-- 🚀 Built with [Bun](https://bun.sh/) for fast development
-- 📝 TypeScript types generated from official OpenAPI spec
-- 🔄 Easy API client with type-safe requests
-- 📦 Zero runtime dependencies for the core client
-- 🛠️ Dev container support for consistent development environment
+| Package | Description |
+| --- | --- |
+| [`@open-alpaca-api/core`](packages/core) | TypeScript types, a minimal `AlpacaClient`, and the generated endpoint `catalog` for all four Alpaca APIs (Trading, Market Data, Broker, AuthX). |
+| [`@open-alpaca-api/mcp`](packages/mcp) | A [Model Context Protocol](https://modelcontextprotocol.io/) server exposing the entire Alpaca API to AI agents. Installable as the `alpaca-mcp` CLI. |
 
-## Installation
+## MCP server (`@open-alpaca-api/mcp`)
 
-### Using Bun (recommended)
-
-```bash
-bun add alpaca-api-ts
-```
-
-### Using npm
+Run it with no install via `npx`:
 
 ```bash
-npm install alpaca-api-ts
+npx @open-alpaca-api/mcp
 ```
 
-### Using yarn
+It speaks MCP over stdio. Configure it entirely through environment variables:
+
+| Variable | Required | Default | Purpose |
+| --- | --- | --- | --- |
+| `ALPACA_API_KEY` | ✅ | — | API key |
+| `ALPACA_API_SECRET` | ✅ | — | API secret |
+| `ALPACA_ENV` | | `paper` | `paper` or `live`. Selects paper/live (trading) and sandbox/production (broker, authx). |
+| `ALPACA_TRADING_URL` / `ALPACA_DATA_URL` / `ALPACA_BROKER_URL` / `ALPACA_AUTHX_URL` | | per-API defaults | Override the base URL for a specific API. |
+
+> ⚠️ The server allows **all verbs across all APIs** — including live order placement when `ALPACA_ENV=live`. It defaults to `paper`. Keep it on paper unless you intend to trade real funds.
+
+### Register with a client
+
+Claude Code:
 
 ```bash
-yarn add alpaca-api-ts
+claude mcp add alpaca \
+  --env ALPACA_API_KEY=your_key \
+  --env ALPACA_API_SECRET=your_secret \
+  --env ALPACA_ENV=paper \
+  -- npx -y @open-alpaca-api/mcp
 ```
 
-## Development Setup
+Or via an `.mcp.json` / client config:
 
-### Prerequisites
-
-- [Bun](https://bun.sh/) runtime (v1.0.0 or higher)
-- Alpaca Markets API credentials (get them at [alpaca.markets](https://alpaca.markets/))
-
-### Using Dev Container
-
-This project includes a dev container configuration for a consistent development environment:
-
-1. Open the project in VS Code
-2. Install the "Dev Containers" extension
-3. Press `F1` and select "Dev Containers: Reopen in Container"
-4. The container will build with Debian + Bun pre-installed
-
-### Local Setup
-
-1. Clone the repository:
-```bash
-git clone https://github.com/yagop/alpaca-api-ts.git
-cd alpaca-api-ts
-```
-
-2. Install dependencies:
-```bash
-bun install
-```
-
-3. Generate TypeScript types from OpenAPI spec:
-```bash
-bun run generate
-```
-
-This will fetch the latest OpenAPI specifications from Alpaca and generate TypeScript types:
-- `src/types/trading-api.ts` - Trading API types
-- `src/types/market-data-api.ts` - Market Data API types
-- `src/types/broker-api.ts` - Broker API types
-- `src/types/authx.ts` - AuthX API types
-
-## Usage
-
-### Basic Example
-
-```typescript
-import { AlpacaClient, type AlpacaConfig } from 'alpaca-api-ts';
-
-const config: AlpacaConfig = {
-  apiKey: 'YOUR_API_KEY',
-  apiSecret: 'YOUR_API_SECRET',
-  paper: true, // Use paper trading environment
-};
-
-const client = new AlpacaClient(config);
-
-// Get account information
-const account = await client.get('/v2/account');
-console.log('Account:', account);
-
-// Get positions
-const positions = await client.get('/v2/positions');
-console.log('Positions:', positions);
-```
-
-### Type-Safe Requests
-
-The generated types provide full type safety for all API endpoints:
-
-```typescript
-import type { TradingComponents, MarketDataComponents } from 'alpaca-api-ts';
-
-// Use generated types for request/response
-type Account = TradingComponents['schemas']['Account'];
-type Order = TradingComponents['schemas']['Order'];
-
-// Make type-safe requests
-const account: Account = await client.get('/v2/account');
-```
-
-You can also use the default `components` export for backward compatibility (maps to Trading API):
-
-```typescript
-import type { components } from 'alpaca-api-ts';
-
-type Account = components['schemas']['Account'];
-```
-
-## Examples
-
-See the [examples](./examples) directory for complete working examples:
-
-- [`basic-usage.ts`](./examples/basic-usage.ts) - Getting account info and checking positions
-- [`place-order.ts`](./examples/place-order.ts) - Placing and managing orders
-- [`market-data.ts`](./examples/market-data.ts) - Fetching market data and quotes
-
-To run an example:
-
-```bash
-bun run examples/basic-usage.ts
-```
-
-## API Reference
-
-### AlpacaClient
-
-The main client class for interacting with the Alpaca API.
-
-#### Constructor
-
-```typescript
-new AlpacaClient(config: AlpacaConfig)
-```
-
-#### Methods
-
-- `get<T>(path: string): Promise<T>` - Make a GET request
-- `post<T>(path: string, body: unknown): Promise<T>` - Make a POST request
-- `delete<T>(path: string): Promise<T>` - Make a DELETE request
-- `patch<T>(path: string, body: unknown): Promise<T>` - Make a PATCH request
-
-### Configuration
-
-```typescript
-interface AlpacaConfig {
-  apiKey: string;      // Your Alpaca API key
-  apiSecret: string;   // Your Alpaca API secret
-  paper?: boolean;     // Use paper trading (default: false)
-  baseUrl?: string;    // Custom base URL (optional)
+```json
+{
+  "mcpServers": {
+    "alpaca": {
+      "command": "npx",
+      "args": ["-y", "@open-alpaca-api/mcp"],
+      "env": {
+        "ALPACA_API_KEY": "your_key",
+        "ALPACA_API_SECRET": "your_secret",
+        "ALPACA_ENV": "paper"
+      }
+    }
+  }
 }
 ```
 
-## Generating Types
+### Tools
 
-The OpenAPI types are generated using [openapi-typescript](https://github.com/drwpow/openapi-typescript). To regenerate types:
+The server uses a **hybrid** design:
 
-```bash
-bun run generate
+- **Curated tools** for the common path, with explicit arguments:
+  `alpaca_get_account`, `alpaca_list_positions`, `alpaca_list_orders`, `alpaca_place_order`, `alpaca_cancel_order`, `alpaca_get_clock`, `alpaca_latest_quote`, `alpaca_get_bars`.
+- **Gateway tools** that reach *every* catalogued operation (266 across all four APIs):
+  - `alpaca_search_endpoints(query, api?, limit?)` — find operations by keyword.
+  - `alpaca_describe_endpoint(operationId)` — inspect parameters and request body.
+  - `alpaca_call_endpoint(operationId, pathParams?, query?, body?)` — invoke any operation. Host and auth are resolved automatically per API.
+
+## Library (`@open-alpaca-api/core`)
+
+```typescript
+import { AlpacaClient, loadCatalog, type components } from '@open-alpaca-api/core';
+
+const client = new AlpacaClient({ apiKey: 'KEY', apiSecret: 'SECRET', paper: true });
+
+// Type-safe requests using the generated OpenAPI types
+type Account = components['schemas']['Account'];
+const account: Account = await client.get('/v2/account');
+
+// Build the runtime catalog of every operation across all four APIs (fetched
+// from the live specs once, then cached on disk and reused).
+const catalog = await loadCatalog();
+console.log(catalog.count); // 266
 ```
 
-This will fetch the latest OpenAPI specifications from Alpaca and generate TypeScript types for all APIs:
-- Trading API: `https://docs.alpaca.markets/openapi/trading-api.json`
-- Market Data API: `https://docs.alpaca.markets/openapi/market-data-api.json`
-- Broker API: `https://docs.alpaca.markets/openapi/broker-api.json`
-- AuthX API: `https://docs.alpaca.markets/openapi/authx.yaml`
+The client exposes `get` / `post` / `patch` / `delete` (Trading API) and `getData` (Market Data API). Type namespaces are exported per API: `TradingComponents`, `MarketDataComponents`, `BrokerComponents`, `AuthXComponents` (with `components`/`paths` aliased to Trading for convenience).
 
-## Scripts
+## Development
 
-- `bun run generate` - Generate TypeScript types from all OpenAPI specs
-- `bun run build` - Generate types and build the project
-- `bun run dev` - Run in development mode with auto-reload
+### Prerequisites
 
-## Contributing
+- [Bun](https://bun.sh/) (v1.0+). A dev container with Bun pre-installed is included (`.devcontainer`).
+- Alpaca Markets API credentials ([alpaca.markets](https://alpaca.markets/)).
 
-Contributions are welcome! Please feel free to submit a Pull Request.
+### Setup
 
-## License
+```bash
+bun install          # install all workspace dependencies
+bun run generate     # fetch the OpenAPI specs -> generate core types
+bun run build        # generate types + bundle the MCP CLI to packages/mcp/dist/mcp.js
+```
 
-MIT License - see [LICENSE](LICENSE) file for details.
+Run the MCP server from source during development:
+
+```bash
+bun run mcp          # = bun run src/mcp.ts in packages/mcp
+```
+
+### Types vs. the runtime catalog
+
+Two things are derived from the four OpenAPI specs, in two different ways:
+
+1. **Types** (build time) — `bun run generate` runs [openapi-typescript](https://github.com/drwpow/openapi-typescript) into `src/types/*.ts` (git-ignored). These give compile-time type safety and are erased at runtime.
+2. **Catalog** (run time) — `loadCatalog()` fetches the live specs and distills each operation (method, path, params, body shape, owning API) into a queryable index. Because types are erased at runtime, the catalog is what lets the MCP server discover and invoke endpoints dynamically. Since the Alpaca API surface doesn't change, it's built once and cached in the OS temp dir, then reused indefinitely (delete the cache file to rebuild).
+
+### Scripts
+
+Root:
+- `bun run generate` — regenerate core types from the OpenAPI specs
+- `bun run build` — generate types, then bundle the MCP CLI
+- `bun run mcp` — start the MCP server from source
+
+`@open-alpaca-api/mcp`:
+- `bun run build` — bundle `src/mcp.ts` → `dist/mcp.js` (shebang + `node` target; SDK and zod external)
+- `bun run start` / `bun run dev` — run the server (with `--watch` for `dev`)
+
+## Examples
+
+See [`packages/core/examples`](packages/core/examples):
+
+- [`basic-usage.ts`](packages/core/examples/basic-usage.ts) — account info and positions
+- [`place-order.ts`](packages/core/examples/place-order.ts) — placing and managing orders
+- [`market-data.ts`](packages/core/examples/market-data.ts) — quotes, bars, snapshots
+
+```bash
+bun run packages/core/examples/basic-usage.ts
+```
 
 ## Resources
 
 - [Alpaca Markets API Documentation](https://docs.alpaca.markets/)
-- [Alpaca Markets OpenAPI Specifications](https://docs.alpaca.markets/openapi)
-  - [Trading API](https://docs.alpaca.markets/openapi/trading-api.json)
-  - [Market Data API](https://docs.alpaca.markets/openapi/market-data-api.json)
-  - [Broker API](https://docs.alpaca.markets/openapi/broker-api.json)
-  - [AuthX API](https://docs.alpaca.markets/openapi/authx.yaml)
+- [Alpaca OpenAPI Specifications](https://docs.alpaca.markets/openapi)
+- [Model Context Protocol](https://modelcontextprotocol.io/)
 - [Bun Documentation](https://bun.sh/docs)
-- [openapi-typescript](https://github.com/drwpow/openapi-typescript)
 
 ## Disclaimer
 
 This is an unofficial TypeScript client for Alpaca Markets. Use at your own risk. Always test with paper trading before using real funds.
+
+## License
+
+MIT License — see [LICENSE](LICENSE) for details.

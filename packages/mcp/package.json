@@ -1,0 +1,42 @@
+{
+  "name": "@open-alpaca-api/mcp",
+  "version": "0.1.0",
+  "description": "Model Context Protocol (MCP) server for the Alpaca Markets API — exposes all Trading, Market Data, Broker, and AuthX endpoints to AI agents",
+  "type": "module",
+  "bin": {
+    "alpaca-mcp": "./dist/mcp.js"
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "bun build src/mcp.ts --outfile dist/mcp.js --target node --external @modelcontextprotocol/sdk --external zod",
+    "start": "bun run src/mcp.ts",
+    "dev": "bun run --watch src/mcp.ts",
+    "prepublishOnly": "npm run build"
+  },
+  "keywords": [
+    "alpaca",
+    "alpaca-markets",
+    "trading",
+    "mcp",
+    "model-context-protocol",
+    "ai",
+    "agent"
+  ],
+  "author": "Yago",
+  "license": "MIT",
+  "publishConfig": {
+    "access": "public"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.29.0",
+    "zod": "^4.4.3"
+  },
+  "devDependencies": {
+    "@open-alpaca-api/core": "0.1.0"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}
