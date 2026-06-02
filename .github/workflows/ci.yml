@@ -1,4 +1,4 @@
-name: Build
+name: CI
 
 on:
   push:
@@ -13,6 +13,11 @@ jobs:
     steps:
     - name: Checkout code
       uses: actions/checkout@v4
+
+    - name: Setup Node 24
+      uses: actions/setup-node@v4
+      with:
+        node-version: '24'
 
     - name: Setup Bun
       uses: oven-sh/setup-bun@v1
@@ -33,6 +38,17 @@ jobs:
 
     - name: Type check (mcp)
       run: bun x tsc --noEmit -p packages/mcp/tsconfig.json
+
+    - name: Smoke test the bundled MCP CLI on Node 24
+      # The published artifact is the bundled CLI; confirm it boots on Node 24.
+      run: |
+        node packages/mcp/dist/mcp.js --version
+        node packages/mcp/dist/mcp.js --help
+
+    - name: Functional test — build the catalog and start the server on Node 24
+      # Exercises loadCatalog() (live fetch + cache) and a full MCP handshake
+      # against the bundled server, all under Node 24.
+      run: node packages/mcp/scripts/smoke.mjs
 
     - name: Upload MCP build artifact
       uses: actions/upload-artifact@v4
