@@ -1,5 +1,5 @@
 {
-  "name": "open-alpaca-api",
+  "name": "alpaca-open-api",
   "version": "0.1.0",
   "private": true,
   "description": "Monorepo for the Open Alpaca API TypeScript client and MCP server",
@@ -8,9 +8,9 @@
     "packages/*"
   ],
   "scripts": {
-    "generate": "bun run --filter '@open-alpaca-api/core' generate",
-    "build": "bun run --filter '@open-alpaca-api/core' build && bun run --filter '@open-alpaca-api/mcp' build",
-    "mcp": "bun run --filter '@open-alpaca-api/mcp' start"
+    "generate": "bun run --filter '@alpaca-open-api/core' generate",
+    "build": "bun run --filter '@alpaca-open-api/core' build && bun run --filter '@alpaca-open-api/mcp' build",
+    "mcp": "bun run --filter '@alpaca-open-api/mcp' start"
   },
   "keywords": [
     "alpaca",

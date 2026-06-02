@@ -142,7 +142,7 @@ async function fetchDocs(): Promise<Record<string, SpecDoc>> {
   return Object.fromEntries(entries);
 }
 
-const CACHE_FILE = join(tmpdir(), 'open-alpaca-api-catalog.json');
+const CACHE_FILE = join(tmpdir(), 'alpaca-open-api-catalog.json');
 
 /**
  * Returns the catalog, deriving it from the live OpenAPI specs.

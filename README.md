@@ -1,4 +1,4 @@
-# open-alpaca-api
+# alpaca-open-api
 
 A TypeScript monorepo for the [Alpaca Markets](https://alpaca.markets/) API, with types and a runtime endpoint catalog generated from the official OpenAPI specifications — plus a ready-to-run MCP server.
 
@@ -6,15 +6,15 @@ A TypeScript monorepo for the [Alpaca Markets](https://alpaca.markets/) API, wit
 
 | Package | Description |
 | --- | --- |
-| [`@open-alpaca-api/core`](packages/core) | TypeScript types, a minimal `AlpacaClient`, and the generated endpoint `catalog` for all four Alpaca APIs (Trading, Market Data, Broker, AuthX). |
-| [`@open-alpaca-api/mcp`](packages/mcp) | A [Model Context Protocol](https://modelcontextprotocol.io/) server exposing the entire Alpaca API to AI agents. Installable as the `alpaca-mcp` CLI. |
+| [`@alpaca-open-api/core`](packages/core) | TypeScript types, a minimal `AlpacaClient`, and the generated endpoint `catalog` for all four Alpaca APIs (Trading, Market Data, Broker, AuthX). |
+| [`@alpaca-open-api/mcp`](packages/mcp) | A [Model Context Protocol](https://modelcontextprotocol.io/) server exposing the entire Alpaca API to AI agents. Installable as the `alpaca-mcp` CLI. |
 
-## MCP server (`@open-alpaca-api/mcp`)
+## MCP server (`@alpaca-open-api/mcp`)
 
 Run it with no install via `npx`:
 
 ```bash
-npx @open-alpaca-api/mcp
+npx @alpaca-open-api/mcp
 ```
 
 It speaks MCP over stdio. Configure it entirely through environment variables:
@@ -37,7 +37,7 @@ claude mcp add alpaca \
   --env ALPACA_API_KEY=your_key \
   --env ALPACA_API_SECRET=your_secret \
   --env ALPACA_ENV=paper \
-  -- npx -y @open-alpaca-api/mcp
+  -- npx -y @alpaca-open-api/mcp
 ```
 
 Or via an `.mcp.json` / client config:
@@ -47,7 +47,7 @@ Or via an `.mcp.json` / client config:
   "mcpServers": {
     "alpaca": {
       "command": "npx",
-      "args": ["-y", "@open-alpaca-api/mcp"],
+      "args": ["-y", "@alpaca-open-api/mcp"],
       "env": {
         "ALPACA_API_KEY": "your_key",
         "ALPACA_API_SECRET": "your_secret",
@@ -69,10 +69,10 @@ The server uses a **hybrid** design:
   - `alpaca_describe_endpoint(operationId)` — inspect parameters and request body.
   - `alpaca_call_endpoint(operationId, pathParams?, query?, body?)` — invoke any operation. Host and auth are resolved automatically per API.
 
-## Library (`@open-alpaca-api/core`)
+## Library (`@alpaca-open-api/core`)
 
 ```typescript
-import { AlpacaClient, loadCatalog, type components } from '@open-alpaca-api/core';
+import { AlpacaClient, loadCatalog, type components } from '@alpaca-open-api/core';
 
 const client = new AlpacaClient({ apiKey: 'KEY', apiSecret: 'SECRET', paper: true });
 
@@ -123,7 +123,7 @@ Root:
 - `bun run build` — generate types, then bundle the MCP CLI
 - `bun run mcp` — start the MCP server from source
 
-`@open-alpaca-api/mcp`:
+`@alpaca-open-api/mcp`:
 - `bun run build` — bundle `src/mcp.ts` → `dist/mcp.js` (shebang + `node` target; SDK and zod external)
 - `bun run start` / `bun run dev` — run the server (with `--watch` for `dev`)
 

@@ -1,5 +1,5 @@
 {
-  "name": "@open-alpaca-api/core",
+  "name": "@alpaca-open-api/core",
   "version": "0.1.0",
   "description": "TypeScript types, client, and endpoint catalog for the Alpaca Markets API, generated from the official OpenAPI specifications",
   "type": "module",

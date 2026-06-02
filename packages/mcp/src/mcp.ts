@@ -13,9 +13,9 @@
  *
  * Both layers funnel through {@link callOperation}, which resolves the correct
  * host and auth strategy per API from the catalog shipped by
- * `@open-alpaca-api/core`.
+ * `@alpaca-open-api/core`.
  *
- * Published as the `@open-alpaca-api/mcp` CLI — run via `npx @open-alpaca-api/mcp`
+ * Published as the `@alpaca-open-api/mcp` CLI — run via `npx @alpaca-open-api/mcp`
  * (or `bun run src/mcp.ts` in development). Configure via environment variables:
  *
  *   ALPACA_API_KEY, ALPACA_API_SECRET   (required)
@@ -26,16 +26,16 @@
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import { z } from 'zod';
-import { loadCatalog, type Catalog, type Operation } from '@open-alpaca-api/core';
+import { loadCatalog, type Catalog, type Operation } from '@alpaca-open-api/core';
 
-// CLI: this package is published as a bin (`alpaca-mcp` / `npx @open-alpaca-api/mcp`).
+// CLI: this package is published as a bin (`alpaca-mcp` / `npx @alpaca-open-api/mcp`).
 // Handle informational flags before any network or transport work.
 const argv = process.argv.slice(2);
 if (argv.includes('--help') || argv.includes('-h')) {
   process.stdout.write(
     `alpaca-mcp — MCP server for the Alpaca Markets API\n\n` +
       `Usage:\n` +
-      `  npx @open-alpaca-api/mcp        Start the server on stdio (for MCP clients)\n\n` +
+      `  npx @alpaca-open-api/mcp        Start the server on stdio (for MCP clients)\n\n` +
       `Environment:\n` +
       `  ALPACA_API_KEY          (required)  API key\n` +
       `  ALPACA_API_SECRET       (required)  API secret\n` +
