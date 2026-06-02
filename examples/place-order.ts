@@ -115,7 +115,15 @@ async function main() {
 
     // Example 6: Place a bracket order (advanced)
     console.log('🎯 Example 6: Placing a bracket order with take-profit and stop-loss...\n');
-    
+
+    // Derive bracket prices from SPY's current price so the example works
+    // regardless of where the market is trading. Alpaca requires the
+    // take-profit limit to be above, and the stop below, the entry price.
+    const spyTrade = await client.getData<{ trade?: { p?: number } }>('/v2/stocks/SPY/trades/latest');
+    const spyPrice = spyTrade.trade?.p ?? 0;
+    const takeProfitPrice = (spyPrice * 1.05).toFixed(2); // +5%
+    const stopLossPrice = (spyPrice * 0.95).toFixed(2); // -5%
+
     const bracketOrder: OrderRequest = {
       symbol: 'SPY',
       qty: '1',
@@ -124,10 +132,10 @@ async function main() {
       time_in_force: 'day',
       order_class: 'bracket',
       take_profit: {
-        limit_price: '450', // Take profit at this price
+        limit_price: takeProfitPrice, // Take profit ~5% above current price
       },
       stop_loss: {
-        stop_price: '400', // Stop loss at this price
+        stop_price: stopLossPrice, // Stop loss ~5% below current price
       },
     };
 
