@@ -130,7 +130,10 @@ export function buildCatalog(docs: Record<string, SpecDoc>): Catalog {
   return { apis, count: operations.length, operations };
 }
 
-/** Fetches and parses every spec. All four are valid JSON (authx uses JSON flow style). */
+/**
+ * Fetches and parses every spec.
+ * Note: `authx.yaml` is served as JSON despite its `.yaml` extension.
+ */
 async function fetchDocs(): Promise<Record<string, SpecDoc>> {
   const entries = await Promise.all(
     Object.entries(SPEC_SOURCES).map(async ([api, { url }]) => {
