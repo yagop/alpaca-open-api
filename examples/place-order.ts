@@ -13,11 +13,13 @@
  * ⚠️  This example uses paper trading by default. Always test with paper trading first!
  */
 
-import { AlpacaClient, type AlpacaConfig, type components } from '../src/index';
+import { AlpacaClient, type AlpacaConfig, type components, type TradingOperations } from '../src/index';
 
 // Use types from the generated OpenAPI specification
 type Order = components['schemas']['Order'];
-type OrderRequest = components['schemas']['OrderRequest'];
+// The order-creation payload is defined inline on the `postOrder` operation
+// rather than as a named schema.
+type OrderRequest = TradingOperations['postOrder']['requestBody']['content']['application/json'];
 
 async function main() {
   // Check for required environment variables

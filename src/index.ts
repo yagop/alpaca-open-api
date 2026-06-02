@@ -1,9 +1,9 @@
 /**
  * Alpaca API TypeScript Client
- * 
+ *
  * This module provides TypeScript types and utilities for the Alpaca Markets API.
  * The types are automatically generated from the official OpenAPI specifications.
- * 
+ *
  * @see https://docs.alpaca.markets/
  */
 
@@ -11,7 +11,11 @@
 // To generate types, run: bun run generate
 
 // Trading API types
-export type { paths as TradingPaths, components as TradingComponents } from './types/trading-api';
+export type {
+  paths as TradingPaths,
+  components as TradingComponents,
+  operations as TradingOperations,
+} from './types/trading-api';
 
 // Market Data API types
 export type { paths as MarketDataPaths, components as MarketDataComponents } from './types/market-data-api';
@@ -28,16 +32,18 @@ export type { paths, components } from './types/trading-api';
 /**
  * Base configuration for Alpaca API client
  */
-export interface AlpacaConfig {
+export type AlpacaConfig = {
   /** API key for authentication */
   apiKey: string;
   /** API secret for authentication */
   apiSecret: string;
-  /** Paper trading or live environment */
+  /** Paper trading or live environment (applies to Trading & Broker endpoints) */
   paper?: boolean;
-  /** Custom base URL (optional) */
+  /** Custom Trading API base URL (optional) */
   baseUrl?: string;
-}
+  /** Custom Market Data API base URL (optional) */
+  dataBaseUrl?: string;
+};
 
 /**
  * Creates authenticated headers for Alpaca API requests
@@ -51,7 +57,7 @@ export function createAuthHeaders(config: AlpacaConfig): Record<string, string> 
 }
 
 /**
- * Gets the appropriate base URL for API requests
+ * Gets the Trading API base URL for the configured environment.
  */
 export function getBaseUrl(config: AlpacaConfig): string {
   if (config.baseUrl) {
@@ -63,82 +69,95 @@ export function getBaseUrl(config: AlpacaConfig): string {
 }
 
 /**
+ * Gets the Market Data API base URL.
+ *
+ * Market data is served from a dedicated host that is independent of the
+ * paper/live distinction, so it is resolved separately from {@link getBaseUrl}.
+ */
+export function getDataBaseUrl(config: AlpacaConfig): string {
+  return config.dataBaseUrl ?? 'https://data.alpaca.markets';
+}
+
+/**
  * Simple Alpaca API client
  */
 export class AlpacaClient {
   private config: AlpacaConfig;
   private baseUrl: string;
+  private dataBaseUrl: string;
   private headers: Record<string, string>;
 
   constructor(config: AlpacaConfig) {
     this.config = config;
     this.baseUrl = getBaseUrl(config);
+    this.dataBaseUrl = getDataBaseUrl(config);
     this.headers = createAuthHeaders(config);
   }
 
   /**
-   * Make a GET request to the Alpaca API
+   * Performs an authenticated request and parses the JSON response.
+   *
+   * Handles empty bodies (e.g. `204 No Content` returned by order cancellation)
+   * and surfaces the Alpaca error payload when a request fails.
    */
-  async get<T>(path: string): Promise<T> {
-    const response = await fetch(`${this.baseUrl}${path}`, {
-      method: 'GET',
+  private async request<T>(method: string, baseUrl: string, path: string, body?: object): Promise<T> {
+    const response = await fetch(`${baseUrl}${path}`, {
+      method,
       headers: this.headers,
+      body: body === undefined ? undefined : JSON.stringify(body),
     });
 
     if (!response.ok) {
-      throw new Error(`API request failed: ${response.status} ${response.statusText}`);
+      const detail = await response.text().catch(() => '');
+      throw new Error(
+        `API request failed: ${response.status} ${response.statusText}${detail ? ` - ${detail}` : ''}`
+      );
     }
 
-    return response.json() as Promise<T>;
+    // No body to parse (204 No Content, or an explicitly empty response).
+    if (response.status === 204 || response.headers.get('content-length') === '0') {
+      return undefined as T;
+    }
+
+    const text = await response.text();
+    return (text ? JSON.parse(text) : undefined) as T;
   }
 
   /**
-   * Make a POST request to the Alpaca API
+   * Make a GET request to the Trading API
    */
-  async post<T>(path: string, body: unknown): Promise<T> {
-    const response = await fetch(`${this.baseUrl}${path}`, {
-      method: 'POST',
-      headers: this.headers,
-      body: JSON.stringify(body),
-    });
-
-    if (!response.ok) {
-      throw new Error(`API request failed: ${response.status} ${response.statusText}`);
-    }
-
-    return response.json() as Promise<T>;
+  get<T>(path: string): Promise<T> {
+    return this.request<T>('GET', this.baseUrl, path);
   }
 
   /**
-   * Make a DELETE request to the Alpaca API
+   * Make a POST request to the Trading API
    */
-  async delete<T>(path: string): Promise<T> {
-    const response = await fetch(`${this.baseUrl}${path}`, {
-      method: 'DELETE',
-      headers: this.headers,
-    });
-
-    if (!response.ok) {
-      throw new Error(`API request failed: ${response.status} ${response.statusText}`);
-    }
-
-    return response.json() as Promise<T>;
+  post<T>(path: string, body: object): Promise<T> {
+    return this.request<T>('POST', this.baseUrl, path, body);
   }
 
   /**
-   * Make a PATCH request to the Alpaca API
+   * Make a DELETE request to the Trading API
    */
-  async patch<T>(path: string, body: unknown): Promise<T> {
-    const response = await fetch(`${this.baseUrl}${path}`, {
-      method: 'PATCH',
-      headers: this.headers,
-      body: JSON.stringify(body),
-    });
+  delete<T>(path: string): Promise<T> {
+    return this.request<T>('DELETE', this.baseUrl, path);
+  }
 
-    if (!response.ok) {
-      throw new Error(`API request failed: ${response.status} ${response.statusText}`);
-    }
+  /**
+   * Make a PATCH request to the Trading API
+   */
+  patch<T>(path: string, body: object): Promise<T> {
+    return this.request<T>('PATCH', this.baseUrl, path, body);
+  }
 
-    return response.json() as Promise<T>;
+  /**
+   * Make a GET request to the Market Data API (https://data.alpaca.markets).
+   *
+   * Use this for `/v2/stocks/...`, `/v2/crypto/...`, and other market-data
+   * endpoints, which are served from a different host than the Trading API.
+   */
+  getData<T>(path: string): Promise<T> {
+    return this.request<T>('GET', this.dataBaseUrl, path);
   }
 }

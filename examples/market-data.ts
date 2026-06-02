@@ -13,15 +13,30 @@
  * Note: Market data access depends on your Alpaca subscription level.
  */
 
-import { AlpacaClient, type AlpacaConfig, type components } from '../src/index';
+import {
+  AlpacaClient,
+  type AlpacaConfig,
+  type TradingComponents,
+  type MarketDataComponents,
+} from '../src/index';
 
-// Use types from the generated OpenAPI specification
-type Clock = components['schemas']['Clock'];
-type LatestTrade = components['schemas']['LatestTrade'];
-type LatestQuote = components['schemas']['LatestQuote'];
-type Bars = components['schemas']['Bars'];
-type Asset = components['schemas']['Asset'];
-type Snapshot = components['schemas']['Snapshot'];
+// Asset is a Trading API resource; the market-data resources come from the
+// Market Data API schema.
+type Asset = TradingComponents['schemas']['Assets'];
+
+// NOTE: Alpaca's published OpenAPI spec models `/v2/clock` as a multi-market
+// `clock_resp` object, but the live REST endpoint returns this flat shape.
+// This is a known spec-vs-response mismatch, so the type is declared locally.
+type Clock = {
+  timestamp: string;
+  is_open: boolean;
+  next_open: string;
+  next_close: string;
+};
+type LatestTrade = MarketDataComponents['schemas']['stock_latest_trades_resp_single'];
+type LatestQuote = MarketDataComponents['schemas']['stock_latest_quotes_resp_single'];
+type Bars = MarketDataComponents['schemas']['stock_bars_resp_single'];
+type Snapshot = MarketDataComponents['schemas']['stock_snapshot'];
 
 async function main() {
   // Check for required environment variables
@@ -48,13 +63,18 @@ async function main() {
     // Example 1: Get market clock
     console.log('🕐 Example 1: Checking market clock...\n');
     
-    const clock = await client.get<Clock>('/v2/clock');
-    console.log('Market Clock:');
-    console.log(`  Current Time: ${clock.timestamp}`);
-    console.log(`  Market Open: ${clock.is_open ? 'Yes' : 'No'}`);
-    console.log(`  Next Open: ${clock.next_open}`);
-    console.log(`  Next Close: ${clock.next_close}`);
-    console.log();
+    try {
+      const clock = await client.get<Clock>('/v2/clock');
+      console.log('Market Clock:');
+      console.log(`  Current Time: ${clock.timestamp}`);
+      console.log(`  Market Open: ${clock.is_open ? 'Yes' : 'No'}`);
+      console.log(`  Next Open: ${clock.next_open}`);
+      console.log(`  Next Close: ${clock.next_close}`);
+      console.log();
+    } catch (error) {
+      console.log('Market clock: not available (Trading API credentials required)');
+      console.log();
+    }
 
     // Example 2: Get latest trade for a symbol
     console.log('📈 Example 2: Getting latest trade for AAPL...\n');
@@ -63,7 +83,7 @@ async function main() {
     
     for (const symbol of symbols) {
       try {
-        const trades = await client.get<LatestTrade>(`/v2/stocks/${symbol}/trades/latest`);
+        const trades = await client.getData<LatestTrade>(`/v2/stocks/${symbol}/trades/latest`);
         console.log(`${symbol}:`);
         console.log(`  Price: $${trades.trade?.p || 'N/A'}`);
         console.log(`  Size: ${trades.trade?.s || 'N/A'}`);
@@ -80,7 +100,7 @@ async function main() {
     
     for (const symbol of symbols) {
       try {
-        const quote = await client.get<LatestQuote>(`/v2/stocks/${symbol}/quotes/latest`);
+        const quote = await client.getData<LatestQuote>(`/v2/stocks/${symbol}/quotes/latest`);
         console.log(`${symbol} Quote:`);
         console.log(`  Bid: $${quote.quote?.bp || 'N/A'} x ${quote.quote?.bs || 'N/A'}`);
         console.log(`  Ask: $${quote.quote?.ap || 'N/A'} x ${quote.quote?.as || 'N/A'}`);
@@ -100,7 +120,7 @@ async function main() {
       const startDate = new Date();
       startDate.setDate(startDate.getDate() - 7); // Last 7 days
 
-      const bars = await client.get<Bars>(
+      const bars = await client.getData<Bars>(
         `/v2/stocks/AAPL/bars?start=${startDate.toISOString()}&end=${endDate.toISOString()}&timeframe=1Day`
       );
 
@@ -125,7 +145,7 @@ async function main() {
     console.log('📸 Example 5: Getting snapshots for multiple symbols...\n');
     
     try {
-      const snapshots = await client.get<Record<string, Snapshot>>(`/v2/stocks/snapshots?symbols=${symbols.join(',')}`);
+      const snapshots = await client.getData<Record<string, Snapshot>>(`/v2/stocks/snapshots?symbols=${symbols.join(',')}`);
       
       for (const symbol of symbols) {
         if (snapshots[symbol]) {
