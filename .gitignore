@@ -137,3 +137,15 @@ dist
 # Vite logs files
 vite.config.js.timestamp-*
 vite.config.ts.timestamp-*
+
+# Generated OpenAPI types
+src/types/authx.ts
+src/types/broker-api.ts
+src/types/market-data-api.ts
+src/types/trading-api.ts
+
+# Bun
+bun.lockb
+
+# npm lock file (we use bun)
+package-lock.json

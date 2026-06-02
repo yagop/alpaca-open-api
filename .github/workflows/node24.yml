@@ -1,0 +1,59 @@
+name: Node 24
+
+on:
+  push:
+    branches: [ main, copilot/* ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  node24:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Setup Node 24
+      uses: actions/setup-node@v4
+      with:
+        node-version: '24'
+
+    - name: Setup Bun
+      uses: oven-sh/setup-bun@v1
+      with:
+        bun-version: latest
+
+    - name: Install dependencies
+      run: bun install
+
+    - name: Build project (generates types + bundles for Node)
+      run: bun run build
+
+    - name: Type check
+      run: bun x tsc --noEmit
+
+    - name: Smoke test on Node 24
+      # Run the TypeScript source directly using Node 24's native type stripping
+      # to confirm the client loads and behaves correctly on Node 24.
+      run: |
+        node --input-type=module -e "
+          import('./src/index.ts').then((m) => {
+            const client = new m.AlpacaClient({ apiKey: 'k', apiSecret: 's', paper: true });
+            const trading = m.getBaseUrl({ apiKey: 'k', apiSecret: 's', paper: true });
+            const data = m.getDataBaseUrl({ apiKey: 'k', apiSecret: 's' });
+            const ok =
+              trading === 'https://paper-api.alpaca.markets' &&
+              data === 'https://data.alpaca.markets' &&
+              typeof client.get === 'function' &&
+              typeof client.getData === 'function';
+            if (!ok) {
+              console.error('Smoke test failed', { trading, data });
+              process.exit(1);
+            }
+            console.log('Node', process.version, '- AlpacaClient OK');
+          }).catch((err) => {
+            console.error(err);
+            process.exit(1);
+          });
+        "
