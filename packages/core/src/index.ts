@@ -29,18 +29,12 @@ export type { paths as AuthXPaths, components as AuthXComponents } from './types
 // Re-export trading API types as default for backward compatibility
 export type { paths, components } from './types/trading-api';
 
-// Runtime endpoint catalog — a queryable index of every operation across all
-// four APIs, derived on demand from the live OpenAPI specs (cached on disk) and
-// used to discover and invoke endpoints dynamically.
-export { loadCatalog, buildCatalog, SPEC_SOURCES } from './build-catalog';
-export type {
-  Catalog,
-  Operation,
-  ApiMeta,
-  AuthStrategy,
-  CatalogParameter,
-  CatalogRequestBody,
-} from './catalog-types';
+// Generated MCP tool manifest — a runtime index of every operation across all
+// four APIs, each carrying a self-contained JSON Schema for its input. Built
+// from the OpenAPI specs (see `generate-tools.ts`) and consumed by the MCP
+// server to register one tool per endpoint.
+export { manifest } from './generated/tools';
+export type { ToolManifest, ToolDef, ToolInputSchema, JsonSchema, ApiMeta, AuthStrategy } from './manifest-types';
 
 /**
  * Base configuration for Alpaca API client

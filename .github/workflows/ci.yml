@@ -27,7 +27,7 @@ jobs:
     - name: Install dependencies
       run: bun install
 
-    - name: Build all packages (generates types + catalog, bundles the MCP CLI)
+    - name: Build all packages (generates types + tool manifest, bundles the MCP CLI)
       run: bun run build
 
     - name: Type check (core)
@@ -45,9 +45,9 @@ jobs:
         node packages/mcp/dist/mcp.js --version
         node packages/mcp/dist/mcp.js --help
 
-    - name: Functional test — build the catalog and start the server on Node 24
-      # Exercises loadCatalog() (live fetch + cache) and a full MCP handshake
-      # against the bundled server, all under Node 24.
+    - name: Functional test — start the server and list every tool on Node 24
+      # Completes a full MCP handshake against the bundled server (offline — the
+      # tool manifest ships in the bundle) and asserts the endpoint surface.
       run: node packages/mcp/scripts/smoke.mjs
 
     - name: Upload MCP build artifact

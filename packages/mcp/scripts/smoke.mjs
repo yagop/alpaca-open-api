@@ -2,9 +2,9 @@
  * Functional smoke test for the bundled MCP server.
  *
  * Launches `dist/mcp.js` exactly as an MCP client (or `npx`) would, completes
- * the protocol handshake, and exercises the tools that need no credentials:
- * the server must build its endpoint catalog (live fetch + on-disk cache) and
- * expose the expected tools. Used by CI to validate Node compatibility.
+ * the protocol handshake, and asserts the server registers the full endpoint
+ * surface from the committed manifest. Needs no credentials and no network —
+ * the manifest is shipped in the bundle. Used by CI to validate Node compat.
  *
  * Run: `node packages/mcp/scripts/smoke.mjs` (from anywhere).
  */
@@ -28,25 +28,22 @@ const client = new Client({ name: 'smoke', version: '0' });
 await client.connect(transport);
 
 const { tools } = await client.listTools();
-const toolNames = tools.map((t) => t.name);
-
-// No-auth tool: searches the freshly built catalog.
-const search = await client.callTool({
-  name: 'alpaca_search_endpoints',
-  arguments: { query: 'latest quote', api: 'data', limit: 1 },
-});
-const result = JSON.parse(search.content[0].text);
+const names = new Set(tools.map((t) => t.name));
 
 await client.close();
 
-const ok =
-  tools.length >= 11 &&
-  toolNames.includes('alpaca_call_endpoint') &&
-  toolNames.includes('alpaca_place_order') &&
-  result.count >= 1;
+// Representative tools spanning Trading (no-arg / body) and Market Data (path+query).
+const expected = ['alpaca_getAccount', 'alpaca_postOrder', 'alpaca_StockLatestQuoteSingle'];
+const missing = expected.filter((n) => !names.has(n));
+
+// A registered tool must advertise a valid object input schema.
+const account = tools.find((t) => t.name === 'alpaca_getAccount');
+const schemaOk = account?.inputSchema?.type === 'object';
+
+const ok = tools.length >= 100 && missing.length === 0 && schemaOk;
 
 if (!ok) {
-  console.error('Smoke test FAILED', { toolCount: tools.length, searchCount: result?.count });
+  console.error('Smoke test FAILED', { toolCount: tools.length, missing, schemaOk });
   process.exit(1);
 }
-console.log(`Node ${process.version} — MCP server OK: ${tools.length} tools, catalog search returned ${result.count} match`);
+console.log(`Node ${process.version} — MCP server OK: ${tools.length} tools registered`);
