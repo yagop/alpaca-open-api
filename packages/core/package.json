@@ -9,10 +9,11 @@
     ".": "./src/index.ts"
   },
   "files": [
-    "src"
+    "src",
+    "!src/**/*.test.ts"
   ],
   "scripts": {
-    "generate": "bunx openapi-typescript@7.13.0 https://docs.alpaca.markets/openapi/authx.yaml -o src/types/authx.ts && bunx openapi-typescript@7.13.0 https://docs.alpaca.markets/openapi/broker-api.json -o src/types/broker-api.ts && bunx openapi-typescript@7.13.0 https://docs.alpaca.markets/openapi/market-data-api.json -o src/types/market-data-api.ts && bunx openapi-typescript@7.13.0 https://docs.alpaca.markets/openapi/trading-api.json -o src/types/trading-api.ts && bun run src/generate-tools.ts",
+    "generate": "bunx openapi-typescript@7.13.0 https://docs.alpaca.markets/openapi/authx.yaml -o src/types/authx.ts && bunx openapi-typescript@7.13.0 https://docs.alpaca.markets/openapi/broker-api.json -o src/types/broker-api.ts && bunx openapi-typescript@7.13.0 https://docs.alpaca.markets/openapi/market-data-api.json -o src/types/market-data-api.ts && bunx openapi-typescript@7.13.0 https://docs.alpaca.markets/openapi/trading-api.json -o src/types/trading-api.ts",
     "build": "bun run generate"
   },
   "keywords": [

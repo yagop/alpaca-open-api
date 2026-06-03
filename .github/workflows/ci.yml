@@ -39,6 +39,11 @@ jobs:
     - name: Type check (mcp)
       run: bun x tsc --noEmit -p packages/mcp/tsconfig.json
 
+    - name: Unit tests
+      # Hermetic bun:test suite (no network/credentials) covering the MCP server
+      # handlers and the per-API host/auth routing in AlpacaClient.
+      run: bun test
+
     - name: Smoke test the bundled MCP CLI on Node 24
       # The published artifact is the bundled CLI; confirm it boots on Node 24.
       run: |

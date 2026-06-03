@@ -33,7 +33,7 @@ const names = new Set(tools.map((t) => t.name));
 await client.close();
 
 // Representative tools spanning Trading (no-arg / body) and Market Data (path+query).
-const expected = ['alpaca_getAccount', 'alpaca_postOrder', 'alpaca_StockLatestQuoteSingle'];
+const expected = ['alpaca_getAccount', 'alpaca_postOrder', 'alpaca_stockLatestQuoteSingle'];
 const missing = expected.filter((n) => !names.has(n));
 
 // A registered tool must advertise a valid object input schema.

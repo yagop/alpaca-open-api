@@ -8,9 +8,11 @@
     "packages/*"
   ],
   "scripts": {
-    "generate": "bun run --filter '@alpaca-open-api/core' generate",
-    "build": "bun run --filter '@alpaca-open-api/core' build && bun run --filter '@alpaca-open-api/mcp' build",
-    "mcp": "bun run --filter '@alpaca-open-api/mcp' start"
+    "generate:mcp": "bunx --bun orval --config orval.config.ts && bun packages/mcp/scripts/postgen.ts",
+    "generate": "bun run --filter '@alpaca-open-api/core' generate && bun run generate:mcp",
+    "build": "bun run generate && bun run --filter '@alpaca-open-api/mcp' build",
+    "mcp": "bun run --filter '@alpaca-open-api/mcp' start",
+    "test": "bun test"
   },
   "keywords": [
     "alpaca",
@@ -25,7 +27,9 @@
   "author": "Yago",
   "license": "MIT",
   "devDependencies": {
+    "@types/bun": "latest",
     "@types/node": "latest",
+    "orval": "^8.15.0",
     "typescript": "^5"
   },
   "engines": {

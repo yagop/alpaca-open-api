@@ -143,10 +143,13 @@ packages/core/src/types/authx.ts
 packages/core/src/types/broker-api.ts
 packages/core/src/types/market-data-api.ts
 packages/core/src/types/trading-api.ts
-packages/core/src/generated/tools.ts
+packages/core/src/generated/
 
 # Bun
 bun.lockb
 
 # npm lock file (we use bun)
 package-lock.json
+
+# Generated from the OpenAPI specs by Orval
+packages/mcp/src/generated/
