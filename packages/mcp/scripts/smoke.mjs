@@ -3,7 +3,7 @@
  *
  * Launches `dist/mcp.js` exactly as an MCP client (or `npx`) would, completes
  * the protocol handshake, and asserts the server registers the full endpoint
- * surface from the committed manifest. Needs no credentials and no network —
+ * surface from the committed manifest. Needs no credentials and no network -
  * the manifest is shipped in the bundle. Used by CI to validate Node compat.
  *
  * Run: `node packages/mcp/scripts/smoke.mjs` (from anywhere).
@@ -46,4 +46,4 @@ if (!ok) {
   console.error('Smoke test FAILED', { toolCount: tools.length, missing, schemaOk });
   process.exit(1);
 }
-console.log(`Node ${process.version} — MCP server OK: ${tools.length} tools registered`);
+console.log(`Node ${process.version} - MCP server OK: ${tools.length} tools registered`);

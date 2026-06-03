@@ -139,10 +139,6 @@ vite.config.js.timestamp-*
 vite.config.ts.timestamp-*
 
 # Generated from the OpenAPI specs (run `bun run generate`)
-packages/core/src/types/authx.ts
-packages/core/src/types/broker-api.ts
-packages/core/src/types/market-data-api.ts
-packages/core/src/types/trading-api.ts
 packages/core/src/generated/
 
 # Bun

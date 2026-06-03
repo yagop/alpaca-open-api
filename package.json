@@ -8,8 +8,7 @@
     "packages/*"
   ],
   "scripts": {
-    "generate:mcp": "bunx --bun orval --config orval.config.ts && bun packages/mcp/scripts/postgen.ts",
-    "generate": "bun run --filter '@alpaca-open-api/core' generate && bun run generate:mcp",
+    "generate": "bunx --bun orval --config orval.config.ts && bun packages/mcp/scripts/postgen.ts",
     "build": "bun run generate && bun run --filter '@alpaca-open-api/mcp' build",
     "mcp": "bun run --filter '@alpaca-open-api/mcp' start",
     "test": "bun test"

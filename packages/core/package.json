@@ -1,7 +1,7 @@
 {
   "name": "@alpaca-open-api/core",
   "version": "0.1.0",
-  "description": "TypeScript types, client, and endpoint catalog for the Alpaca Markets API, generated from the official OpenAPI specifications",
+  "description": "Typed fetch clients and types for the Alpaca Markets API, generated from the official OpenAPI specifications with Orval",
   "type": "module",
   "main": "src/index.ts",
   "types": "src/index.ts",
@@ -12,10 +12,6 @@
     "src",
     "!src/**/*.test.ts"
   ],
-  "scripts": {
-    "generate": "bunx openapi-typescript@7.13.0 https://docs.alpaca.markets/openapi/authx.yaml -o src/types/authx.ts && bunx openapi-typescript@7.13.0 https://docs.alpaca.markets/openapi/broker-api.json -o src/types/broker-api.ts && bunx openapi-typescript@7.13.0 https://docs.alpaca.markets/openapi/market-data-api.json -o src/types/market-data-api.ts && bunx openapi-typescript@7.13.0 https://docs.alpaca.markets/openapi/trading-api.json -o src/types/trading-api.ts",
-    "build": "bun run generate"
-  },
   "keywords": [
     "alpaca",
     "alpaca-markets",

@@ -18,7 +18,7 @@ async function main() {
     process.exit(1);
   }
   if ((process.env.ALPACA_ENV ?? '').toLowerCase() !== 'paper') {
-    console.warn('⚠️  ALPACA_ENV is not "paper" — this will place a REAL order on your live account.');
+    console.warn('⚠️  ALPACA_ENV is not "paper" - this will place a REAL order on your live account.');
   }
 
   console.log('🚀 Placing a market order for AAPL...');

@@ -1,8 +1,8 @@
 /**
- * Basic usage — read account, positions, and recent orders via the generated
+ * Basic usage - read account, positions, and recent orders via the generated
  * Trading client.
  *
- * Credentials come from the environment the mutator reads. Live by default —
+ * Credentials come from the environment the mutator reads. Live by default -
  * use your live API keys (paper keys are different):
  *   export ALPACA_API_KEY="your_api_key"
  *   export ALPACA_API_SECRET="your_api_secret"
@@ -27,13 +27,13 @@ async function main() {
   const { data: positions } = await tradingApi.getAllOpenPositions();
   console.log(`\n📈 Open positions: ${positions?.length ?? 0}`);
   for (const p of positions ?? []) {
-    console.log(`  ${p.symbol}: ${p.qty} @ $${p.current_price} — P&L $${p.unrealized_pl}`);
+    console.log(`  ${p.symbol}: ${p.qty} @ $${p.current_price} - P&L $${p.unrealized_pl}`);
   }
 
   const { data: orders } = await tradingApi.getAllOrders();
   console.log(`\n📋 Recent orders: ${orders?.length ?? 0}`);
   for (const o of (orders ?? []).slice(0, 5)) {
-    console.log(`  ${o.symbol} ${o.side} ${o.qty} ${o.type} — ${o.status}`);
+    console.log(`  ${o.symbol} ${o.side} ${o.qty} ${o.type} - ${o.status}`);
   }
 }
 

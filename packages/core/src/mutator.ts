@@ -6,7 +6,7 @@
  * is a host-less path with the query already attached and `options.body`/
  * `Content-Type` already set. A mutator picks the runtime host for its API,
  * attaches the API's auth, `fetch`es, and returns `{ status, data }` (the shape
- * the generated code reads). This is the only bespoke HTTP code in the project —
+ * the generated code reads). This is the only bespoke HTTP code in the project -
  * it carries what the former hand-written `AlpacaClient` did. Host + auth come
  * from {@link API_ROUTING}.
  */
@@ -22,7 +22,7 @@ const ENV_URL: Record<string, string> = {
 
 /**
  * True only when explicitly opting into paper/sandbox hosts via `ALPACA_ENV=paper`
- * (or the legacy `ALPACA_PAPER=true`). Default is **live** — provide live API keys,
+ * (or the legacy `ALPACA_PAPER=true`). Default is **live** - provide live API keys,
  * which differ from paper keys.
  */
 function isPaper(): boolean {

@@ -6,7 +6,7 @@ import { buildServer } from './compose';
 
 // Drives the composed server through a real MCP client over an in-memory
 // transport. `fetch` is stubbed so a tool call exercises the full path
-// (handler → generated client → mutator → fetch) without network or creds.
+// (handler -> generated client -> mutator -> fetch) without network or creds.
 const realFetch = globalThis.fetch;
 
 beforeEach(() => {

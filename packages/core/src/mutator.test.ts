@@ -3,7 +3,7 @@ import { makeMutator } from './mutator';
 
 // The mutator is the single HTTP layer behind every generated client (MCP tools
 // and the library's fetch clients). These tests stub `fetch` to capture the
-// outgoing request and assert per-API host + auth — no network, no real creds.
+// outgoing request and assert per-API host + auth - no network, no real creds.
 
 type Captured = { url: string; method?: string; headers: Record<string, string>; body?: any };
 let captured: Captured | undefined;

@@ -2,10 +2,10 @@
  * Composes the four Orval-generated tool surfaces onto one MCP server.
  *
  * For each API, Orval emits a `handlers` module (`<op>Handler` functions that
- * adapt validated args → the fetch client → an MCP result) and a
+ * adapt validated args -> the fetch client -> an MCP result) and a
  * `tool-schemas.zod` module (`<Op>Params` / `<Op>QueryParams` / `<Op>Body` Zod
  * input schemas). This walks every handler, pairs it with its Zod input by
- * Orval's naming convention, and registers it via `registerTool` — so argument
+ * Orval's naming convention, and registers it via `registerTool` - so argument
  * validation, JSON-Schema advertisement, and dispatch are all generated. No
  * transport is attached; the bin (`mcp.ts`) connects stdio and tests connect an
  * in-memory transport.
@@ -73,10 +73,10 @@ export function buildServer(enabledApis: string[] = []): { server: McpServer; co
       const invoke = hasInput ? (args: any) => handler(args) : () => handler();
       server.registerTool(
         name,
-        { description: `${api} · ${op}`, ...(hasInput ? { inputSchema: shape } : {}) },
+        { description: `${api} - ${op}`, ...(hasInput ? { inputSchema: shape } : {}) },
         (async (args: any) => {
           // Generated handlers always include `structuredContent`, but our tools
-          // declare no outputSchema — strip it so the SDK accepts the result.
+          // declare no outputSchema - strip it so the SDK accepts the result.
           const { structuredContent: _omit, ...result } = await invoke(args);
           return result;
         }) as any

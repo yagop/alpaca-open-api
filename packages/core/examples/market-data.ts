@@ -1,5 +1,5 @@
 /**
- * Market data — latest trade & quote per symbol via the generated Market Data
+ * Market data - latest trade & quote per symbol via the generated Market Data
  * client. (Market Data is served from one host regardless of paper/live.)
  *
  * Credentials come from the environment the mutator reads:

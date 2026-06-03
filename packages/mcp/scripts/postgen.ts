@@ -3,10 +3,10 @@
  *
  * Fix-ups for `@orval/mcp` v8.15 quirks when used with `override.mutator`:
  *  1. The `<api>Mutator` import is emitted into `handlers.ts` (unused) instead of
- *     `http-client.ts` (where it is called) — we add it to http-client so the
+ *     `http-client.ts` (where it is called) - we add it to http-client so the
  *     bundle resolves at runtime.
- *  2. `server.ts` (its own stdio entry) is unused — `src/mcp.ts` composes all four
- *     APIs onto one server — and references response schemas we disable, so it
+ *  2. `server.ts` (its own stdio entry) is unused - `src/mcp.ts` composes all four
+ *     APIs onto one server - and references response schemas we disable, so it
  *     does not type-check. We delete it.
  *  3. `handlers.ts` carries occasional arg-ordering bugs for operations that have
  *     both a path param and a body (e.g. `addAssetToWatchlistByName`). It is
