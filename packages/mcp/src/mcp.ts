@@ -20,6 +20,7 @@
 
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import { buildServer } from './compose';
+import { version } from '../package.json';
 
 const argv = process.argv.slice(2);
 if (argv.includes('--help') || argv.includes('-h')) {
@@ -38,7 +39,7 @@ if (argv.includes('--help') || argv.includes('-h')) {
   process.exit(0);
 }
 if (argv.includes('--version') || argv.includes('-v')) {
-  process.stdout.write('0.1.0\n');
+  process.stdout.write(`${version}\n`);
   process.exit(0);
 }
 
