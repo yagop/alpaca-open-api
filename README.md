@@ -26,10 +26,10 @@ It speaks MCP over stdio. Configure it entirely through environment variables:
 | `ALPACA_API_KEY` | ✅ | - | API key (live and paper keys are different) |
 | `ALPACA_API_SECRET` | ✅ | - | API secret |
 | `ALPACA_ENV` | | `live` | `paper` or `live`. Selects paper/live (trading) and sandbox/production (broker, authx). |
-| `ALPACA_MCP_APIS` | | all four | Comma-separated subset of APIs to expose: `trading,data,broker,authx`. Narrows the ~269-tool surface for clients that struggle with large tool lists. |
+| `ALPACA_TOOLSETS` | | `trading,data` | Comma-separated subset of toolsets to expose: `trading,data,broker,authx`. Add `broker,authx` when you need the full ~269-tool surface. |
 | `ALPACA_TRADING_URL` / `ALPACA_DATA_URL` / `ALPACA_BROKER_URL` / `ALPACA_AUTHX_URL` | | per-API defaults | Override the base URL for a specific API. |
 
-> ⚠️ The server allows **all verbs across all APIs** and **defaults to `live`** - including real order placement. Provide live keys, or set `ALPACA_ENV=paper` (with your paper keys) to trade against the paper account. Live and paper API keys are different.
+> ⚠️ The server allows **all verbs in enabled toolsets** and **defaults to `live`** - including real order placement in the default `trading` toolset. Provide live keys, or set `ALPACA_ENV=paper` (with your paper keys) to trade against the paper account. Live and paper API keys are different.
 
 ### Register with a client
 
@@ -63,7 +63,7 @@ Or via an `.mcp.json` / client config:
 
 ### Tools
 
-Every Alpaca operation is registered as its own tool, `alpaca_<operationId>` - **269 tools** across all four APIs. Each tool's input is a Zod schema generated from the OpenAPI spec, with arguments grouped into `pathParams`, `queryParams`, and `bodyParams`, and validated before the call:
+Every enabled Alpaca operation is registered as its own tool, `alpaca_<operationId>`. By default the server registers the `trading` and `data` toolsets; set `ALPACA_TOOLSETS=trading,data,broker,authx` to expose the full **269-tool** surface across all four APIs. Each tool's input is a Zod schema generated from the OpenAPI spec, with arguments grouped into `pathParams`, `queryParams`, and `bodyParams`, and validated before the call:
 
 | Tool | Example arguments |
 | --- | --- |
@@ -71,7 +71,7 @@ Every Alpaca operation is registered as its own tool, `alpaca_<operationId>` - *
 | `alpaca_stockLatestQuoteSingle` | `{ "pathParams": { "symbol": "AAPL" }, "queryParams": { "feed": "iex" } }` |
 | `alpaca_postOrder` | `{ "bodyParams": { "symbol": "AAPL", "side": "buy", "qty": "1", "type": "market", "time_in_force": "day" } }` |
 
-Host and auth are resolved automatically per API. Set `ALPACA_MCP_APIS` (e.g. `trading,data`) to expose only the APIs you need.
+Host and auth are resolved automatically per API. Set `ALPACA_TOOLSETS` (e.g. `trading,data,broker,authx`) to choose the toolsets you need.
 
 ## Library (`@alpaca-open-api/core`)
 

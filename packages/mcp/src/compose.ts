@@ -32,19 +32,23 @@ const APIS: Record<string, Mod> = {
   authx: { handlers: authxHandlers, zod: authxZod },
 };
 
+const DEFAULT_TOOLSETS = ['trading', 'data'];
+
 const pascal = (s: string): string => s.charAt(0).toUpperCase() + s.slice(1);
 
 /**
- * Builds a fully-registered {@link McpServer} (no transport connected). An empty
- * `enabledApis` registers every API; otherwise only the listed ones.
+ * Builds a registered {@link McpServer} (no transport connected). By default,
+ * the trading and data toolsets are registered; pass an explicit list to expose
+ * a different subset, such as broker/authx.
  */
-export function buildServer(enabledApis: string[] = []): { server: McpServer; count: number } {
+export function buildServer(enabledToolsets: string[] = DEFAULT_TOOLSETS): { server: McpServer; count: number } {
   const server = new McpServer({ name: 'alpaca-api', version: '0.1.0' }, { capabilities: { tools: {} } });
+  const allowed = new Set(enabledToolsets);
   const used = new Set<string>();
   let count = 0;
 
   for (const [api, mod] of Object.entries(APIS)) {
-    if (enabledApis.length > 0 && !enabledApis.includes(api)) continue;
+    if (!allowed.has(api)) continue;
 
     for (const [exportName, handler] of Object.entries(mod.handlers)) {
       if (typeof handler !== 'function' || !exportName.endsWith('Handler')) continue;

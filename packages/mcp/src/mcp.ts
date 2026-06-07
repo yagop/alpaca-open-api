@@ -14,7 +14,7 @@
  *
  *   ALPACA_API_KEY, ALPACA_API_SECRET   (required; live and paper keys differ)
  *   ALPACA_ENV = paper | live            (default: live)
- *   ALPACA_MCP_APIS = trading,data,...     (optional: restrict the registered APIs)
+ *   ALPACA_TOOLSETS = trading,data,...    (optional: restrict registered toolsets; default: trading,data)
  *   ALPACA_{TRADING,DATA,BROKER,AUTHX}_URL  (optional per-API base-URL overrides)
  */
 
@@ -33,7 +33,7 @@ if (argv.includes('--help') || argv.includes('-h')) {
       `  ALPACA_API_KEY          (required)  API key (live and paper keys differ)\n` +
       `  ALPACA_API_SECRET       (required)  API secret\n` +
       `  ALPACA_ENV              paper|live  (default: live)\n` +
-      `  ALPACA_MCP_APIS         csv         restrict to a subset: trading,data,broker,authx\n` +
+      `  ALPACA_TOOLSETS         csv         restrict to a subset: trading,data,broker,authx (default: trading,data)\n` +
       `  ALPACA_{TRADING,DATA,BROKER,AUTHX}_URL   per-API base-URL overrides\n`
   );
   process.exit(0);
@@ -50,14 +50,17 @@ if (!process.env.ALPACA_API_KEY || !process.env.ALPACA_API_SECRET) {
   );
 }
 
-const enabledApis = (process.env.ALPACA_MCP_APIS ?? '')
-  .split(',')
-  .map((s) => s.trim().toLowerCase())
-  .filter(Boolean);
+const toolsetsEnv = process.env.ALPACA_TOOLSETS?.trim();
+const enabledToolsets = toolsetsEnv
+  ? toolsetsEnv
+      .split(',')
+      .map((s) => s.trim().toLowerCase())
+      .filter(Boolean)
+  : undefined;
 
-const { server, count } = buildServer(enabledApis);
+const { server, count } = buildServer(enabledToolsets);
 await server.connect(new StdioServerTransport());
 process.stderr.write(
   `alpaca-api MCP server ready - ${count} tools registered` +
-    `${enabledApis.length ? ` (apis: ${enabledApis.join(', ')})` : ''}.\n`
+    `${enabledToolsets?.length ? ` (toolsets: ${enabledToolsets.join(', ')})` : ''}.\n`
 );

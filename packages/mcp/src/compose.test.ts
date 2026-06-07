@@ -21,28 +21,42 @@ afterEach(() => {
   globalThis.fetch = realFetch;
 });
 
-async function connect(enabledApis: string[] = []): Promise<Client> {
+async function connect(enabledToolsets?: string[]): Promise<Client> {
   const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
-  const { server } = buildServer(enabledApis);
+  const { server } = buildServer(enabledToolsets);
   await server.connect(serverTransport);
   const client = new Client({ name: 'test', version: '0' });
   await client.connect(clientTransport);
   return client;
 }
 
-test('registers the full Alpaca surface with object input schemas', async () => {
+test('registers trading and data toolsets by default with object input schemas', async () => {
   const client = await connect();
   const { tools } = await client.listTools();
-  expect(tools.length).toBeGreaterThan(250);
+  expect(tools.length).toBe(114);
   const names = new Set(tools.map((t) => t.name));
   expect(names.has('alpaca_getAccount')).toBe(true);
   expect(names.has('alpaca_postOrder')).toBe(true);
   expect(names.has('alpaca_stockLatestQuoteSingle')).toBe(true);
+  expect(names.has('alpaca_getAllAccounts')).toBe(false); // broker-only
+  expect(names.has('alpaca_issueTokens')).toBe(false); // authx-only
   expect(tools.find((t) => t.name === 'alpaca_getAccount')?.inputSchema.type).toBe('object');
   await client.close();
 });
 
-test('ALPACA_MCP_APIS-style filtering registers only the requested API', async () => {
+test('explicitly registering all toolsets exposes the full Alpaca surface', async () => {
+  const client = await connect(['trading', 'data', 'broker', 'authx']);
+  const { tools } = await client.listTools();
+  expect(tools.length).toBe(269);
+  const names = new Set(tools.map((t) => t.name));
+  expect(names.has('alpaca_getAccount')).toBe(true);
+  expect(names.has('alpaca_stockLatestQuoteSingle')).toBe(true);
+  expect(names.has('alpaca_getAllAccounts')).toBe(true);
+  expect(names.has('alpaca_issueTokens')).toBe(true);
+  await client.close();
+});
+
+test('ALPACA_TOOLSETS-style filtering registers only the requested toolset', async () => {
   const client = await connect(['trading']);
   const names = (await client.listTools()).tools.map((t) => t.name);
   expect(names).toContain('alpaca_getAccount');
