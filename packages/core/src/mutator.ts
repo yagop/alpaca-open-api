@@ -5,7 +5,7 @@
  * Orval's generated clients call `<api>Mutator(url, options)` per operation: `url`
  * is a host-less path with the query already attached and `options.body`/
  * `Content-Type` already set. A mutator picks the runtime host for its API,
- * attaches the API's auth, `fetch`es, and returns `{ status, data }` (the shape
+ * attaches the API's auth, `fetch`es, and returns `{ status, data, headers }` (the shape
  * the generated code reads). This is the only bespoke HTTP code in the project -
  * it carries what the former hand-written `AlpacaClient` did. Host + auth come
  * from {@link API_ROUTING}.
@@ -70,8 +70,10 @@ export function makeMutator(api: string) {
         /* leave as raw text */
       }
     }
-    // Generated clients/handlers branch on `.status` and read `.data`.
-    const result: any = { status: response.status, data: text ? data : undefined };
+    // Generated clients/handlers branch on `.status` and read `.data`; the response
+    // contracts also declare a `headers: Headers` field, so we pass the real headers
+    // through (rate-limit info etc.) rather than leave that typed field undefined.
+    const result: any = { status: response.status, data: text ? data : undefined, headers: response.headers };
     return result;
   };
 }

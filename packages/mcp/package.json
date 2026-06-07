@@ -10,7 +10,7 @@
     "dist"
   ],
   "scripts": {
-    "build": "bun build src/mcp.ts --outfile dist/mcp.js --target node --external @modelcontextprotocol/sdk --external zod",
+    "build": "bun build src/mcp.ts --outfile dist/mcp.js --target node --conditions source --external @modelcontextprotocol/sdk --external zod",
     "start": "bun run src/mcp.ts",
     "dev": "bun run --watch src/mcp.ts",
     "prepublishOnly": "npm run build"

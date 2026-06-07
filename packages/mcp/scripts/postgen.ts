@@ -8,10 +8,14 @@
  *  2. `server.ts` (its own stdio entry) is unused - `src/mcp.ts` composes all four
  *     APIs onto one server - and references response schemas we disable, so it
  *     does not type-check. We delete it.
- *  3. `handlers.ts` carries occasional arg-ordering bugs for operations that have
- *     both a path param and a body (e.g. `addAssetToWatchlistByName`). It is
- *     generated code, so we mark it `@ts-nocheck` rather than gate our build on
- *     upstream codegen; our authored code (mcp.ts, mutator.ts) stays type-checked.
+ *  3. `handlers.ts` calls the fetch client with the wrong arg order for operations
+ *     that take both a query param and a body: the template emits
+ *     `op(args.bodyParams, args.queryParams, ...)`, but the client signature is
+ *     `op(queryParams, body, ...)`. Left as-is, a call would send the body as the
+ *     query string and the query as the body. We swap the two args so the runtime
+ *     call is correct. Because this is the only thing that stopped the handlers
+ *     from type-checking, we no longer mask them with `@ts-nocheck` - a future
+ *     arg-order regression now fails `tsc` instead of shipping silently.
  */
 
 import { existsSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
@@ -20,9 +24,16 @@ import { fileURLToPath } from 'node:url';
 
 const generatedDir = join(dirname(fileURLToPath(import.meta.url)), '..', 'src', 'generated');
 
-const prepend = (file: string, text: string): void => {
+/**
+ * Swap `(args.bodyParams, args.queryParams,` -> `(args.queryParams, args.bodyParams,`
+ * at every handler call site. Targets only the query+body call pattern (path-param
+ * handlers already emit the path arg first), and is idempotent: once swapped the
+ * source pattern is gone, so re-running is a no-op.
+ */
+const fixQueryBodyArgOrder = (file: string): void => {
   const source = readFileSync(file, 'utf8');
-  if (!source.startsWith(text.split('\n')[0])) writeFileSync(file, `${text}${source}`);
+  const fixed = source.replace(/\(args\.bodyParams, args\.queryParams,/g, '(args.queryParams, args.bodyParams,');
+  if (fixed !== source) writeFileSync(file, fixed);
 };
 
 for (const api of readdirSync(generatedDir)) {
@@ -39,7 +50,7 @@ for (const api of readdirSync(generatedDir)) {
   }
 
   const handlers = join(apiDir, 'handlers.ts');
-  if (existsSync(handlers)) prepend(handlers, '// @ts-nocheck\n');
+  if (existsSync(handlers)) fixQueryBodyArgOrder(handlers);
 }
 
-process.stderr.write('postgen: injected mutator imports, removed unused server.ts, marked handlers @ts-nocheck\n');
+process.stderr.write('postgen: injected mutator imports, removed unused server.ts, fixed query+body arg order\n');

@@ -1,0 +1,13 @@
+{
+  "//": "Regression gate: type-check the emitted declarations under Node-style resolution (node16/nodenext) so a published consumer that does not set skipLibCheck cannot hit TS2834. Run after fix-dts-extensions.ts as part of the build.",
+  "compilerOptions": {
+    "module": "nodenext",
+    "moduleResolution": "nodenext",
+    "target": "ES2022",
+    "noEmit": true,
+    "skipLibCheck": false,
+    "strict": true,
+    "types": []
+  },
+  "include": ["dist/**/*.d.ts"]
+}

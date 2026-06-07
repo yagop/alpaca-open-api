@@ -80,7 +80,7 @@ The library ships typed fetch clients, one namespace per API. Credentials and th
 ```typescript
 import { tradingApi, dataApi, tradingModel } from '@alpaca-open-api/core';
 
-// Each call returns { data, status }; `data` is typed from the spec.
+// Each call returns { data, status, headers }; `data` is typed from the spec.
 const { data: account } = await tradingApi.getAccount();
 console.log(account?.cash);
 
@@ -108,7 +108,7 @@ Client namespaces are `tradingApi`, `dataApi`, `brokerApi`, `authxApi`; the matc
 ```bash
 bun install          # install all workspace dependencies
 bun run generate     # generate the clients + Zod schemas from the OpenAPI specs (Orval)
-bun run build        # generate, then bundle the MCP CLI to packages/mcp/dist/mcp.js
+bun run build        # generate, then build both packages to dist/ (core lib + MCP CLI)
 bun run test         # run the unit tests
 ```
 
@@ -131,9 +131,12 @@ A small post-step (`packages/mcp/scripts/postgen.ts`) smooths over a couple of `
 
 Root:
 - `bun run generate` - regenerate all clients and schemas from the OpenAPI specs
-- `bun run build` - generate, then bundle the MCP CLI
+- `bun run build` - generate, then build both packages to `dist/` (the core library and the MCP CLI)
 - `bun run mcp` - start the MCP server from source
 - `bun run test` - run the unit tests
+
+`@alpaca-open-api/core`:
+- `bun run build` - bundle `src/index.ts` -> `dist/index.js` (ESM, `node` target) and emit `dist/*.d.ts` via `tsc`
 
 `@alpaca-open-api/mcp`:
 - `bun run build` - bundle `src/mcp.ts` -> `dist/mcp.js` (shebang + `node` target; SDK and zod external)

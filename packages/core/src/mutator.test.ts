@@ -37,12 +37,14 @@ afterEach(() => {
   for (const k of ENV_KEYS) delete process.env[k];
 });
 
-test('trading (paper) targets the paper host with APCA headers and returns { status, data }', async () => {
-  const result = await makeMutator('trading')('/v2/account', { method: 'GET' });
+test('trading (paper) targets the paper host with APCA headers and returns { status, data, headers }', async () => {
+  const result = await makeMutator('trading')<{ status: number; data: unknown; headers: Headers }>('/v2/account', { method: 'GET' });
   expect(captured?.url).toBe('https://paper-api.alpaca.markets/v2/account');
   expect(captured?.headers['APCA-API-KEY-ID']).toBe('KEY');
   expect(captured?.headers['APCA-API-SECRET-KEY']).toBe('SECRET');
-  expect(result).toEqual({ status: 200, data: { ok: true } });
+  expect(result.status).toBe(200);
+  expect(result.data).toEqual({ ok: true });
+  expect(result.headers).toBeInstanceOf(Headers);
 });
 
 test('trading (live) targets the live host', async () => {
@@ -89,8 +91,16 @@ test('a per-API base URL override wins over the routing table', async () => {
 
 test('an empty (204) response yields undefined data', async () => {
   respond = () => new Response(null, { status: 204 });
-  const result = await makeMutator('trading')('/v2/orders/o-1', { method: 'DELETE' });
-  expect(result).toEqual({ status: 204, data: undefined });
+  const result = await makeMutator('trading')<{ status: number; data: unknown }>('/v2/orders/o-1', { method: 'DELETE' });
+  expect(result.status).toBe(204);
+  expect(result.data).toBeUndefined();
+});
+
+test('passes the response headers through (the generated contracts type them)', async () => {
+  respond = () => new Response(JSON.stringify({ ok: true }), { status: 200, headers: { 'x-ratelimit-remaining': '42' } });
+  const result = await makeMutator('trading')<{ headers: Headers }>('/v2/account', { method: 'GET' });
+  expect(result.headers).toBeInstanceOf(Headers);
+  expect(result.headers.get('x-ratelimit-remaining')).toBe('42');
 });
 
 test('an unknown api throws', async () => {

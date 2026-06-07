@@ -60,6 +60,29 @@ test('dispatches a valid call through the mutator and returns the data as text',
   await client.close();
 });
 
+test('a query+body operation routes the query to the URL and the body to the request body (not swapped)', async () => {
+  // Regression guard for the Orval MCP arg-order bug fixed in postgen.ts:
+  // addAssetToWatchlistByName's client signature is (queryParams, body), but the
+  // template emitted them swapped, so `?name=...` and `{ symbol }` were reversed.
+  // Capture the outgoing request and assert the wire shape end-to-end.
+  let captured: { url: string; body?: string } | undefined;
+  globalThis.fetch = (async (input: Parameters<typeof fetch>[0], init?: Parameters<typeof fetch>[1]) => {
+    captured = { url: String(input), body: init?.body == null ? undefined : String(init.body) };
+    return new Response(JSON.stringify({ ok: true }), { status: 200 });
+  }) as typeof fetch;
+
+  const client = await connect(['trading']);
+  const result = (await client.callTool({
+    name: 'alpaca_addAssetToWatchlistByName',
+    arguments: { queryParams: { name: 'tech' }, bodyParams: { symbol: 'AAPL' } },
+  })) as CallToolResult;
+
+  expect(result.isError).toBeFalsy();
+  expect(captured?.url).toBe('https://paper-api.alpaca.markets/v2/watchlists:by_name?name=tech');
+  expect(captured?.body).toBe(JSON.stringify({ symbol: 'AAPL' }));
+  await client.close();
+});
+
 test('rejects arguments that fail the generated Zod schema', async () => {
   const client = await connect(['trading']);
   // getOrderByOrderID requires pathParams.order_id; omit it.
