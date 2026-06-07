@@ -21,7 +21,7 @@ export const API_ROUTING: Record<string, ApiMeta> = {
       paper: 'https://paper-api.alpaca.markets',
     }
   },
-  data: { 
+  data: {
     auth: 'apca',
     servers: {
       live: 'https://data.alpaca.markets',
