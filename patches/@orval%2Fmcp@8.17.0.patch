@@ -1,0 +1,42 @@
+diff --git a/dist/index.mjs b/dist/index.mjs
+index b08310d02b543ca66e62dbd33cce1dfb05ba13ce..63285d077add9fedc4be4a3c5200722f4de964cd 100644
+--- a/dist/index.mjs
++++ b/dist/index.mjs
+@@ -1,5 +1,5 @@
+ import path from "node:path";
+-import { camel, generateMutatorImports, getFileInfo, getFullRoute, getParamsInPath, isObject, isString, jsDoc, jsStringEscape, pascal, upath } from "@orval/core";
++import { camel, generateMutatorImports, getFileInfo, getFullRoute, getParamsInPath, GetterPropType, isObject, isString, jsDoc, jsStringEscape, pascal, upath } from "@orval/core";
+ import { generateClient, generateFetchHeader } from "@orval/fetch";
+ import { generateZod } from "@orval/zod";
+ //#region src/index.ts
+@@ -48,7 +48,7 @@ const generateMcp = (verbOptions) => {
+ 	}).join(",\n");
+ 	if (pathParamsType) handlerArgsTypes.push(`  pathParams: {\n${pathParamsType}\n  };`);
+ 	if (verbOptions.queryParams) handlerArgsTypes.push(`  queryParams: ${verbOptions.queryParams.schema.name};`);
+-	if (verbOptions.body.definition) handlerArgsTypes.push(`  bodyParams: ${verbOptions.body.definition};`);
++	if (verbOptions.body.definition) handlerArgsTypes.push(`  bodyParams${verbOptions.body.isOptional ? "?" : ""}: ${verbOptions.body.definition};`);
+ 	const handlerArgsName = `${verbOptions.operationName}Args`;
+ 	const handlerArgsImplementation = handlerArgsTypes.length > 0 ? `
+ export type ${handlerArgsName} = {
+@@ -60,8 +60,10 @@ ${handlerArgsTypes.join("\n")}
+ 		const pathParamsArgs = originalParamNames.map((paramName) => `args.pathParams.${paramName}`).join(", ");
+ 		fetchParams.push(pathParamsArgs);
+ 	}
+-	if (verbOptions.body.definition) fetchParams.push(`args.bodyParams`);
+-	if (verbOptions.queryParams) fetchParams.push(`args.queryParams`);
++	for (const prop of verbOptions.props) {
++		if (prop.type === GetterPropType.BODY) fetchParams.push("args.bodyParams");
++		else if (prop.type === GetterPropType.QUERY_PARAM) fetchParams.push("args.queryParams");
++	}
+ 	const handlersImplementation = [handlerArgsImplementation, `
+ export const ${`${verbOptions.operationName}Handler`} = async (${handlerArgsTypes.length > 0 ? `args: ${handlerArgsName}, ` : ""}options?: RequestInit) => {
+   const res = await ${verbOptions.operationName}(${fetchParams.length > 0 ? `${fetchParams.join(", ")}, ` : ""}options);
+@@ -105,7 +107,7 @@ const generateServer = (verbOptions, output, context) => {
+ 		const inputSchemaTypes = [];
+ 		if (verbOption.params.length > 0) inputSchemaTypes.push(`pathParams: ${pascalOperationName}Params`);
+ 		if (verbOption.queryParams) inputSchemaTypes.push(`queryParams: ${pascalOperationName}QueryParams`);
+-		if (verbOption.body.definition) inputSchemaTypes.push(`bodyParams: ${pascalOperationName}Body`);
++		if (verbOption.body.definition) inputSchemaTypes.push(`bodyParams: ${pascalOperationName}Body${verbOption.body.isOptional ? ".optional()" : ""}`);
+ 		const inputSchemaImplementation = inputSchemaTypes.length > 0 ? `\n    inputSchema: {\n      ${inputSchemaTypes.join(",\n      ")}\n    },` : "";
+ 		const outputSchemaImplementation = hasResponseSchema ? `\n    outputSchema: ${pascalOperationName}Response,` : "";
+ 		const annotationsValue = getAnnotations(verbOption.verb);
