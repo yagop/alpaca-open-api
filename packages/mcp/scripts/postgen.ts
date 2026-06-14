@@ -1,39 +1,118 @@
 /**
  * Post-processing for the Orval-generated MCP output (run right after `orval`).
  *
- * Fix-ups for `@orval/mcp` v8.15 quirks when used with `override.mutator`:
+ * Fix-ups for `@orval/mcp` quirks when used with `override.mutator`:
  *  1. The `<api>Mutator` import is emitted into `handlers.ts` (unused) instead of
  *     `http-client.ts` (where it is called) - we add it to http-client so the
  *     bundle resolves at runtime.
- *  2. `server.ts` (its own stdio entry) is unused - `src/mcp.ts` composes all four
+ *  2. `server.ts` (its own stdio entry) is unused - `compose.ts` composes all four
  *     APIs onto one server - and references response schemas we disable, so it
  *     does not type-check. We delete it.
- *  3. `handlers.ts` calls the fetch client with the wrong arg order for operations
- *     that take both a query param and a body: the template emits
- *     `op(args.bodyParams, args.queryParams, ...)`, but the client signature is
- *     `op(queryParams, body, ...)`. Left as-is, a call would send the body as the
- *     query string and the query as the body. We swap the two args so the runtime
- *     call is correct. Because this is the only thing that stopped the handlers
- *     from type-checking, we no longer mask them with `@ts-nocheck` - a future
- *     arg-order regression now fails `tsc` instead of shipping silently.
+ *  3. We emit a `register.ts` per API: a statically-typed `register<Api>Tools`
+ *     function with one `server.registerTool` call per operation (handler + Zod
+ *     input schemas referenced by name), so `compose.ts` registers tools without
+ *     reflecting over module exports or casting.
+ *
+ * The earlier query+body arg-order quirk (and optional bodies typed as required)
+ * is now fixed upstream in `@orval/mcp` (orval PR #3600) and applied via the patch
+ * in `patches/`, so no post-gen swap is needed. Drop that patch once orval ships
+ * the fix in a release.
  */
 
-import { existsSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
+import {
+  existsSync,
+  readFileSync,
+  readdirSync,
+  rmSync,
+  writeFileSync,
+} from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-const generatedDir = join(dirname(fileURLToPath(import.meta.url)), '..', 'src', 'generated');
+const generatedDir = join(
+  dirname(fileURLToPath(import.meta.url)),
+  '..',
+  'src',
+  'generated',
+);
+
+const pascal = (s: string): string => s.charAt(0).toUpperCase() + s.slice(1);
 
 /**
- * Swap `(args.bodyParams, args.queryParams,` -> `(args.queryParams, args.bodyParams,`
- * at every handler call site. Targets only the query+body call pattern (path-param
- * handlers already emit the path arg first), and is idempotent: once swapped the
- * source pattern is gone, so re-running is a no-op.
+ * Emit `register.ts` for one API by reading the generated `handlers.ts` and
+ * `tool-schemas.zod.ts`: one `server.registerTool` call per `<op>Handler`, paired
+ * with its Zod input (`<Op>Params`/`<Op>QueryParams`/`<Op>Body`). Operations whose
+ * handler takes args but have no generated Zod (form-encoded bodies) get a
+ * permissive `z.record` body and are cast to the handler's own arg type.
  */
-const fixQueryBodyArgOrder = (file: string): void => {
-  const source = readFileSync(file, 'utf8');
-  const fixed = source.replace(/\(args\.bodyParams, args\.queryParams,/g, '(args.queryParams, args.bodyParams,');
-  if (fixed !== source) writeFileSync(file, fixed);
+const generateRegister = (api: string, apiDir: string): void => {
+  const handlersSrc = readFileSync(join(apiDir, 'handlers.ts'), 'utf8');
+  const zodSrc = readFileSync(join(apiDir, 'tool-schemas.zod.ts'), 'utf8');
+  const zodExports = new Set(
+    [...zodSrc.matchAll(/export const (\w+) =/g)].map((m) => m[1]),
+  );
+
+  let usesZod = false;
+  let usesSchemas = false;
+  const calls: string[] = [];
+
+  for (const match of handlersSrc.matchAll(
+    /export const (\w+)Handler = async \(\s*(\w+)/g,
+  )) {
+    const op = match[1];
+    const head = `ctx.tool('${op}'), { description: ctx.describe('${op}')`;
+
+    if (match[2] !== 'args') {
+      calls.push(
+        `  server.registerTool(${head} }, async () => ctx.strip(await handlers.${op}Handler()));`,
+      );
+      continue;
+    }
+
+    const P = pascal(op);
+    const parts: string[] = [];
+    if (zodExports.has(`${P}Params`)) parts.push(`pathParams: schemas.${P}Params`);
+    if (zodExports.has(`${P}QueryParams`))
+      parts.push(`queryParams: schemas.${P}QueryParams`);
+    if (zodExports.has(`${P}Body`)) parts.push(`bodyParams: schemas.${P}Body`);
+
+    if (parts.length > 0) {
+      usesSchemas = true;
+      calls.push(
+        `  server.registerTool(${head}, inputSchema: { ${parts.join(', ')} } }, async (args) => ctx.strip(await handlers.${op}Handler(args)));`,
+      );
+    } else {
+      // Form-encoded body with no generated Zod: validate permissively, then cast
+      // the validated args to the handler's own parameter type.
+      usesZod = true;
+      calls.push(
+        `  server.registerTool(${head}, inputSchema: { bodyParams: z.record(z.string(), z.string()) } }, async (args) => ctx.strip(await handlers.${op}Handler(args as unknown as Parameters<typeof handlers.${op}Handler>[0])));`,
+      );
+    }
+  }
+
+  const imports = [
+    usesZod ? `import { z } from 'zod';` : '',
+    `import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';`,
+    `import type { RegisterContext } from '../../registry';`,
+    `import * as handlers from './handlers';`,
+    usesSchemas ? `import * as schemas from './tool-schemas.zod';` : '',
+  ]
+    .filter(Boolean)
+    .join('\n');
+
+  const content = `// Generated by scripts/postgen.ts - do not edit.
+${imports}
+
+export const register${pascal(api)}Tools = (
+  server: McpServer,
+  ctx: RegisterContext,
+): void => {
+${calls.join('\n')}
+};
+`;
+
+  writeFileSync(join(apiDir, 'register.ts'), content);
 };
 
 for (const api of readdirSync(generatedDir)) {
@@ -46,11 +125,13 @@ for (const api of readdirSync(generatedDir)) {
   if (existsSync(httpClient)) {
     const importLine = `import { ${api}Mutator } from '../../mutator';`;
     const source = readFileSync(httpClient, 'utf8');
-    if (!source.includes(importLine)) writeFileSync(httpClient, `${importLine}\n${source}`);
+    if (!source.includes(importLine))
+      writeFileSync(httpClient, `${importLine}\n${source}`);
   }
 
-  const handlers = join(apiDir, 'handlers.ts');
-  if (existsSync(handlers)) fixQueryBodyArgOrder(handlers);
+  generateRegister(api, apiDir);
 }
 
-process.stderr.write('postgen: injected mutator imports, removed unused server.ts, fixed query+body arg order\n');
+process.stderr.write(
+  'postgen: injected mutator imports, removed unused server.ts, generated register.ts\n',
+);
