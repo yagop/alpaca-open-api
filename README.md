@@ -122,10 +122,10 @@ bun run mcp          # = bun run src/mcp.ts in packages/mcp
 
 `bun run generate` runs [Orval](https://orval.dev/) (one project per API, see `orval.config.ts`) to produce, into `packages/*/src/generated/` (git-ignored, rebuilt on demand):
 
-- the MCP tool surface for `@alpaca-open-api/mcp` - per-operation handlers and Zod input schemas, composed onto one stdio server in `packages/mcp/src/compose.ts`;
+- the MCP tool surface for `@alpaca-open-api/mcp` - per-operation handlers and Zod input schemas, plus a generated `register<Api>Tools` function per API that statically registers each operation onto the single stdio server composed in `packages/mcp/src/compose.ts`;
 - the typed fetch clients and model types for `@alpaca-open-api/core`.
 
-A small post-step (`packages/mcp/scripts/postgen.ts`) smooths over a couple of `@orval/mcp` quirks. Orval is run under the Bun runtime (`bunx --bun`), since its CLI uses APIs missing from older Node.
+A post-step (`packages/mcp/scripts/postgen.ts`) injects the mutator import, removes the unused generated `server.ts`, and emits the per-API registration. The upstream `@orval/mcp` fix for MCP handler argument order and optional request bodies (orval PR #3600) is applied via a pinned patch in `patches/` until it ships in an orval release. Orval is run under the Bun runtime (`bunx --bun`), since its CLI uses APIs missing from older Node.
 
 ### Scripts
 
