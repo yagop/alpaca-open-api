@@ -17,7 +17,7 @@
 
 ---
 
-## ✨ What you get
+## Alpaca Open API
 
 - 🤖 **MCP server** — expose **every** Alpaca endpoint to Claude, Cursor, VS Code and friends as `alpaca_<operationId>` tools. One `npx`, zero config files.
 - 🧩 **Typed clients** — `tradingApi`, `dataApi`, `brokerApi`, `authxApi` with full request/response types straight from the specs.
@@ -211,48 +211,41 @@ Host and auth are resolved automatically per API.
 
 ---
 
-## 🎬 See it in action
+## ✅ Results by category
 
-One paper-account session, fanned out across market data, your portfolio, and reference data — every row below is a real `alpaca_*` tool call. Values are an illustrative point-in-time snapshot from a **paper / sandbox** account (June 2026); live results will differ.
+A real round-trip against a **paper account**, driven entirely through the MCP tools:
 
-<details>
-<summary>📋 <b>Expand the example session</b></summary>
+### 📊 Market data
 
-<br/>
-
-**📊 Market data**
-
-| Tool | Result |
+| Method | Result |
 | --- | --- |
-| `alpaca_stockSnapshots` | NVDA last trade $209.97, INTC $133.86, TSLA $399.81 (6/18 close) |
-| `alpaca_stockLatestQuotes` | NVDA bid/ask 210.00 / 231.80; MSFT bid 359.90 |
-| `alpaca_stockBars` | NVDA 9 daily candles 6/8 → 6/18 (ranged ~$200–212) |
-| `alpaca_movers` | Penny-stock dominated — ADTX +127%, INLF -64% |
-| `alpaca_news` | 5 NVDA stories (FAB-10 ETF filing, semis whale activity, SpaceX/SPCX) |
-| `alpaca_cryptoSnapshots` / `alpaca_cryptoLatestQuotes` | BTC $63,610 / ETH $1,725 — live, 24/7 |
-| `alpaca_optionChain` / `alpaca_optionSnapshots` | NVDA 6/22 call chain with quotes & greeks |
+| `stockSnapshots` | NVDA last trade $209.97, INTC $133.86, MU $1,139.94, MRVL $312.37, TSLA $399.81 (6/18 close) |
+| `stockLatestQuotes` | NVDA bid/ask 210.00 / 231.80; MSFT bid 359.90 |
+| `stockBars` | NVDA 9 daily candles 6/8→6/18 (ranged ~$200–212) |
+| `movers` | Penny-stock dominated — ADTX +127%, INLF −64% |
+| `news` | 5 NVDA stories (FAB-10 ETF filing, semis whale activity, SpaceX/SPCX) |
+| `cryptoSnapshots` / `cryptoLatestQuotes` | BTC $63,610 / ETH $1,725 — live, 24/7 |
+| `optionChain` / `optionSnapshots` | NVDA 6/22 call chain w/ quotes & greeks |
 
-**🏦 Account & portfolio**
+### 🏦 Account & portfolio
 
-| Tool | Result |
+| Method | Result |
 | --- | --- |
-| `alpaca_getAccount` | ACTIVE, equity $99,931.66, cash $98,799.59, buying power $397,862.50, options level 3, not PDT |
-| `alpaca_getAllOpenPositions` | 3 positions: AAPL 2sh long (-$24), NVDA 1sh short (-$32), SPY 1sh long (-$12) |
-| `alpaca_getAllOrders` | Recent SPY bracket order, AAPL fills, NVDA short opened Nov 2025 |
-| `alpaca_getAccountPortfolioHistory` | ~flat near $99.9k over the past month |
-| `alpaca_getAccountActivities` | Fills + CAT/TAF fees + initial $100k paper deposit |
+| `getAccount` | ACTIVE, equity $99,931.66, cash $98,799.59, buying power $397,862.50, options level 3, not PDT |
+| `getAllOpenPositions` | 3 positions: AAPL 2sh long (−$24), NVDA 1sh short (−$32), SPY 1sh long (−$12) |
+| `getAllOrders` | Recent SPY bracket order, AAPL fills, NVDA short opened Nov 2025 |
+| `getAccountPortfolioHistory` | ~flat near $99.9k over the past month |
+| `getAccountActivities` | Fills + CAT/TAF fees + initial $100k deposit (2024-02-07) |
 
-**🗓️ Reference**
+### 🗓️ Reference
 
-| Tool | Result |
+| Method | Result |
 | --- | --- |
-| `alpaca_calendar` | Next trading day Mon 6/22, 09:30–16:00 ET |
-| `alpaca_getV2Assets` | ~75 tradable crypto pairs (BTC, ETH, SOL, DOGE…) |
-| `alpaca_getOptionsContracts` | 5 NVDA 6/22 call contracts |
-| `alpaca_getV2CorporateActionsAnnouncements` | Works (no AAPL div/split in window → empty) |
-| `alpaca_getWatchlists` | None saved (`[]`) |
-
-</details>
+| `calendar` | Next trading day Mon 6/22, 09:30–16:00 ET |
+| `getV2Assets` | ~75 tradable crypto pairs (BTC, ETH, SOL, DOGE…) |
+| `getOptionsContracts` | 5 NVDA 6/22 call contracts |
+| `getV2CorporateActionsAnnouncements` | Works (no AAPL div/split in window → empty) |
+| `getWatchlists` | None saved ([]) |
 
 ---
 
