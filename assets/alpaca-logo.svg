@@ -1,0 +1,71 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" width="256" height="256" role="img" aria-label="alpaca-open-api logo">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#7C3AED"/>
+      <stop offset="0.55" stop-color="#DB2777"/>
+      <stop offset="1" stop-color="#F59E0B"/>
+    </linearGradient>
+    <linearGradient id="wool" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#FFFFFF"/>
+      <stop offset="1" stop-color="#FFEACB"/>
+    </linearGradient>
+  </defs>
+
+  <rect width="256" height="256" rx="56" fill="url(#bg)"/>
+
+  <!-- ground shadow -->
+  <ellipse cx="128" cy="226" rx="72" ry="10" fill="#000000" opacity="0.12"/>
+
+  <!-- legs -->
+  <g fill="#F3D9B8">
+    <rect x="98" y="180" width="14" height="44" rx="7"/>
+    <rect x="144" y="180" width="14" height="44" rx="7"/>
+  </g>
+
+  <!-- tail puff -->
+  <circle cx="188" cy="160" r="13" fill="url(#wool)"/>
+
+  <!-- body -->
+  <ellipse cx="128" cy="168" rx="62" ry="48" fill="url(#wool)"/>
+
+  <!-- neck -->
+  <path d="M112 76 q-8 54 6 86 l24 0 q10 -44 2 -88 z" fill="url(#wool)"/>
+
+  <!-- ears -->
+  <path d="M106 48 q-8 -28 10 -32 q5 17 -2 33 z" fill="#F3D9B8"/>
+  <path d="M146 48 q8 -28 -10 -32 q-5 17 2 33 z" fill="#F3D9B8"/>
+
+  <!-- head -->
+  <ellipse cx="126" cy="70" rx="28" ry="30" fill="url(#wool)"/>
+
+  <!-- fluffy top tuft -->
+  <g fill="url(#wool)">
+    <circle cx="118" cy="40" r="12"/>
+    <circle cx="134" cy="40" r="12"/>
+    <circle cx="126" cy="30" r="14"/>
+  </g>
+
+  <!-- snout -->
+  <ellipse cx="126" cy="86" rx="15" ry="12" fill="#F3D9B8"/>
+
+  <!-- blush -->
+  <circle cx="107" cy="80" r="5" fill="#F9A8D4" opacity="0.65"/>
+  <circle cx="145" cy="80" r="5" fill="#F9A8D4" opacity="0.65"/>
+
+  <!-- eyes -->
+  <circle cx="115" cy="66" r="4.5" fill="#3A2E2E"/>
+  <circle cx="137" cy="66" r="4.5" fill="#3A2E2E"/>
+  <circle cx="116.5" cy="64.5" r="1.5" fill="#FFFFFF"/>
+  <circle cx="138.5" cy="64.5" r="1.5" fill="#FFFFFF"/>
+
+  <!-- mouth -->
+  <path d="M121 86 q5 5 10 0" stroke="#3A2E2E" stroke-width="2.4" fill="none" stroke-linecap="round"/>
+
+  <!-- trading spark: tiny candlesticks -->
+  <g opacity="0.9">
+    <rect x="40" y="196" width="6" height="22" rx="3" fill="#22C55E"/>
+    <rect x="41.5" y="190" width="3" height="34" rx="1.5" fill="#22C55E"/>
+    <rect x="54" y="200" width="6" height="16" rx="3" fill="#EF4444"/>
+    <rect x="55.5" y="196" width="3" height="26" rx="1.5" fill="#EF4444"/>
+  </g>
+</svg>
