@@ -28,11 +28,11 @@
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/yagop/alpaca-api-ts.git",
+    "url": "git+https://github.com/yagop/alpaca-open-api.git",
     "directory": "packages/mcp"
   },
-  "homepage": "https://github.com/yagop/alpaca-api-ts#readme",
-  "bugs": "https://github.com/yagop/alpaca-api-ts/issues",
+  "homepage": "https://github.com/yagop/alpaca-open-api#readme",
+  "bugs": "https://github.com/yagop/alpaca-open-api/issues",
   "publishConfig": {
     "access": "public"
   },
