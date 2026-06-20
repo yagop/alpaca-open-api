@@ -1,6 +1,7 @@
 name: Release
 
-# Publishes both packages to npm when a v* tag is pushed (e.g. `git tag v0.1.0 && git push --tags`).
+# Publishes both packages to npm when a v* tag is pushed (e.g. `git tag v1.0.0 && git push --tags`).
+# The tagged commit must be on `main` (guarded below), so only reviewed/merged code is published.
 # Builds from the repo root first so the git-ignored generated code is regenerated before publish.
 on:
   push:
@@ -23,6 +24,18 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # full history so the on-main ancestry check works
+
+      - name: Ensure the release tag is on main
+        run: |
+          git fetch --no-tags origin main
+          if git merge-base --is-ancestor "$GITHUB_SHA" origin/main; then
+            echo "Tag $GITHUB_REF_NAME ($GITHUB_SHA) is on main - proceeding."
+          else
+            echo "::error::Tag $GITHUB_REF_NAME ($GITHUB_SHA) is not on main; only tags on main may publish."
+            exit 1
+          fi
 
       - name: Setup Bun
         uses: oven-sh/setup-bun@v1
