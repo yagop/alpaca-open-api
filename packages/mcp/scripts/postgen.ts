@@ -14,9 +14,8 @@
  *     reflecting over module exports or casting.
  *
  * The earlier query+body arg-order quirk (and optional bodies typed as required)
- * is now fixed upstream in `@orval/mcp` (orval PR #3600) and applied via the patch
- * in `patches/`, so no post-gen swap is needed. Drop that patch once orval ships
- * the fix in a release.
+ * was fixed upstream in `@orval/mcp` (orval PR #3600), released in orval 8.18.0,
+ * so no post-gen swap is needed.
  */
 
 import {

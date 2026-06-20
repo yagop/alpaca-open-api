@@ -28,13 +28,10 @@
   "devDependencies": {
     "@types/bun": "latest",
     "@types/node": "latest",
-    "orval": "^8.17.0",
+    "orval": "^8.18.0",
     "typescript": "^5"
   },
   "engines": {
     "node": ">=18.0.0"
-  },
-  "patchedDependencies": {
-    "@orval/mcp@8.17.0": "patches/@orval%2Fmcp@8.17.0.patch"
   }
 }

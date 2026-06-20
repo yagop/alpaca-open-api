@@ -14,7 +14,7 @@ The toolchain is Bun, not npm/node - use `bun` for everything. Orval itself is r
 ## Commands
 
 ```bash
-bun install                              # install workspace deps (also applies the orval patch, see below)
+bun install                              # install workspace deps
 bun run generate                         # Orval -> packages/*/src/generated/ , then postgen.ts
 bun run build                            # generate, then build both packages to dist/
 bun run mcp                              # run the MCP server from source (packages/mcp/src/mcp.ts)
@@ -70,8 +70,8 @@ So to add/rename/change a tool: change the OpenAPI spec or `orval.config.ts` and
 
 The registration intentionally avoids reflecting over module exports (which erases each handler's per-op types and forces `any`/casts). Generating one concrete `server.registerTool` call per op keeps every registration type-checked. The only cast in the whole generated surface is a single documented `as unknown as` for `issueTokens` (form-encoded body with no generated Zod). `compose.ts` and `registry.ts` are hand-written and must stay free of `any`/casts.
 
-## The @orval/mcp patch
+## @orval/mcp argument order (fixed upstream)
 
-`patches/@orval%2Fmcp@8.17.0.patch` (wired via `patchedDependencies` in `package.json`, applied on `bun install`) carries orval PR #3600 - the upstream fix for MCP handler query/body **argument order** and for optional request bodies being typed as required. We are on `@orval/mcp@8.17.0`, which predates the release of that fix.
+`@orval/mcp` once emitted MCP handler query/body arguments in the wrong **order** and typed optional request bodies as required. We carried orval PR #3600 as a local patch against `@orval/mcp@8.17.0`; that fix shipped in **orval 8.18.0**, so the patch and its `patchedDependencies` entry are gone and we depend on `orval@^8.18.0` directly.
 
-When orval ships a release containing #3600, **bump orval and delete both the patch file and the `patchedDependencies` entry** (the patch key won't match the new version). The patch is what makes `postgen.ts` free of an arg-order swap; do not reintroduce that swap.
+Because the fix is upstream, `postgen.ts` does **not** swap argument order - do not reintroduce that swap.
