@@ -288,14 +288,10 @@ MIT License — see [LICENSE](LICENSE) for details.
 
 ### ⚠️ Disclaimer
 
-<sub>
-
-This is an **unofficial**, community-built project and is **not affiliated with, endorsed by, or sponsored by Alpaca** or its affiliates.<br/>
+<sub>This is an **unofficial**, community-built project and is **not affiliated with, endorsed by, or sponsored by Alpaca** or its affiliates.<br/>
 It is provided **"as is", without warranty of any kind** (see [LICENSE](LICENSE)). Nothing here is financial, investment, or trading advice.<br/>
 **Trading involves substantial risk of loss.** The server **defaults to `live`** and can place real orders — always test with **paper trading** (`ALPACA_ENV=paper`) first.<br/>
-You are solely responsible for safeguarding your API keys and for any activity performed with them.
-
-</sub>
+You are solely responsible for safeguarding your API keys and for any activity performed with them.</sub>
 
 <sub>Made with 🦙 + [Bun](https://bun.sh/) + [Orval](https://orval.dev/)</sub>
 
