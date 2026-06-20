@@ -1,24 +1,10 @@
-<table>
-<tr>
-<td valign="middle">
 <pre>
-▄██
- ██
- ██████▄
- ▀ ▀ ▀ ▀
+▄██       🤖 MCP server: every Alpaca endpoint as a tool
+ ██       🧩 Typed clients for all 4 APIs
+ ██████▄  🛰️ Trading · Data · Broker · AuthX (269 tools)
+ ▀ ▀ ▀ ▀  🔒 One auth seam, host + auth per API
+          ⚡ Bun-native, generated from OpenAPI specs
 </pre>
-</td>
-<td valign="middle">
-
-- 🤖 **MCP server** — expose **every** Alpaca endpoint to Claude, Cursor, VS Code and friends as `alpaca_<operationId>` tools. One `npx`, zero config files.
-- 🧩 **Typed clients** — `tradingApi`, `dataApi`, `brokerApi`, `authxApi` with full request/response types straight from the specs.
-- 🛰️ **All four APIs** — Trading, Market Data, Broker, and AuthX, up to **269 tools**.
-- 🔒 **One auth seam** — every call routes through a single tiny mutator that resolves host + auth per API.
-- ⚡ **Bun-native** & generated-first — almost everything is produced from the official OpenAPI specs with [Orval](https://orval.dev/), so it stays in lockstep with Alpaca.
-
-</td>
-</tr>
-</table>
 
 <div align="center">
 
@@ -35,7 +21,7 @@
 
 </div>
 
-> 🧪 Currently shipping as a **release candidate** (`@alpaca-open-api/mcp@rc`). **v1.0.0 is coming soon** — the examples below target the stable tag.
+---
 
 ## 🤖 MCP server (`@alpaca-open-api/mcp`)
 
@@ -86,54 +72,6 @@ Edit `claude_desktop_config.json` (Settings → Developer → Edit Config):
 <summary><b>Cursor</b></summary>
 
 Create `.cursor/mcp.json` in your project (or `~/.cursor/mcp.json` for all projects):
-
-```json
-{
-  "mcpServers": {
-    "alpaca": {
-      "command": "npx",
-      "args": ["-y", "@alpaca-open-api/mcp"],
-      "env": {
-        "ALPACA_API_KEY": "your_paper_key",
-        "ALPACA_API_SECRET": "your_paper_secret",
-        "ALPACA_ENV": "paper"
-      }
-    }
-  }
-}
-```
-</details>
-
-<details>
-<summary><b>VS Code</b> (GitHub Copilot / MCP)</summary>
-
-Create `.vscode/mcp.json`. VS Code uses a `servers` key and can prompt for secrets via `inputs`:
-
-```json
-{
-  "inputs": [
-    { "id": "alpaca_key", "type": "promptString", "description": "Alpaca API key" },
-    { "id": "alpaca_secret", "type": "promptString", "description": "Alpaca API secret", "password": true }
-  ],
-  "servers": {
-    "alpaca": {
-      "command": "npx",
-      "args": ["-y", "@alpaca-open-api/mcp"],
-      "env": {
-        "ALPACA_API_KEY": "${input:alpaca_key}",
-        "ALPACA_API_SECRET": "${input:alpaca_secret}",
-        "ALPACA_ENV": "paper"
-      }
-    }
-  }
-}
-```
-</details>
-
-<details>
-<summary><b>Windsurf</b></summary>
-
-Edit `~/.codeium/windsurf/mcp_config.json`:
 
 ```json
 {
