@@ -4,7 +4,7 @@ const SPECS: Record<string, string> = {
   trading: 'https://docs.alpaca.markets/openapi/trading-api.json',
   data: 'https://docs.alpaca.markets/openapi/market-data-api.json',
   broker: 'https://docs.alpaca.markets/openapi/broker-api.json',
-  authx: 'https://docs.alpaca.markets/openapi/authx.yaml',
+  authx: 'https://docs.alpaca.markets/openapi/auth.json',
 };
 
 /**
