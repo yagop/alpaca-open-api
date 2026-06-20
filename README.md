@@ -15,8 +15,6 @@ files.
 [![built with Bun](https://img.shields.io/badge/built%20with-Bun-000000?logo=bun)](https://bun.sh/)
 [![license: MIT](https://img.shields.io/badge/license-MIT-blue)](LICENSE)
 
-</div>
-
 ---
 
 ## 🤖 MCP server (`@alpaca-open-api/mcp`)
