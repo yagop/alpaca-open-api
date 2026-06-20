@@ -1,6 +1,11 @@
-<div align="center">
+```
+▄██
+ ██
+ ██████▄
+ ▀ ▀ ▀ ▀
+```
 
-<img src="assets/alpaca-logo.svg" alt="alpaca-open-api logo" width="160" height="160" />
+<div align="center">
 
 # 🦙 alpaca-open-api
 
