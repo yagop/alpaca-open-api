@@ -31,6 +31,13 @@
   ],
   "author": "Yago",
   "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/yagop/alpaca-api-ts.git",
+    "directory": "packages/core"
+  },
+  "homepage": "https://github.com/yagop/alpaca-api-ts#readme",
+  "bugs": "https://github.com/yagop/alpaca-api-ts/issues",
   "publishConfig": {
     "access": "public"
   },

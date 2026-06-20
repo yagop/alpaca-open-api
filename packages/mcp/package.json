@@ -4,7 +4,7 @@
   "description": "Model Context Protocol (MCP) server for the Alpaca Markets API — exposes all Trading, Market Data, Broker, and AuthX endpoints to AI agents",
   "type": "module",
   "bin": {
-    "alpaca-mcp": "./dist/mcp.js"
+    "alpaca-mcp": "dist/mcp.js"
   },
   "files": [
     "dist"
@@ -26,6 +26,13 @@
   ],
   "author": "Yago",
   "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/yagop/alpaca-api-ts.git",
+    "directory": "packages/mcp"
+  },
+  "homepage": "https://github.com/yagop/alpaca-api-ts#readme",
+  "bugs": "https://github.com/yagop/alpaca-api-ts/issues",
   "publishConfig": {
     "access": "public"
   },

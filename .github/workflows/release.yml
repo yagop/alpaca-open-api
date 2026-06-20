@@ -1,0 +1,80 @@
+name: Release
+
+# Publishes both packages to npm when a v* tag is pushed (e.g. `git tag v0.1.0 && git push --tags`).
+# Builds from the repo root first so the git-ignored generated code is regenerated before publish.
+on:
+  push:
+    tags:
+      - 'v*'
+
+# Serialize runs for the same tag; never cancel an in-flight publish.
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+  id-token: write # required for npm provenance
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v1
+        with:
+          bun-version: latest
+
+      - name: Setup Node 24 (npm publish + provenance)
+        uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          registry-url: 'https://registry.npmjs.org'
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Build all packages (generates code + bundles; generated/ is git-ignored)
+        run: bun run build
+
+      - name: Unit tests
+        run: bun test
+
+      - name: Verify the tag matches both package versions
+        run: |
+          VER="${GITHUB_REF_NAME#v}"
+          for p in core mcp; do
+            PKG="$(node -p "require('./packages/$p/package.json').version")"
+            if [ "$PKG" != "$VER" ]; then
+              echo "::error::tag $GITHUB_REF_NAME ($VER) != packages/$p version ($PKG); bump package.json before tagging"
+              exit 1
+            fi
+          done
+
+      # Each publish is a no-op if that version is already on the registry, so the
+      # job is safely re-runnable after a partial failure (core ok, mcp failed).
+      - name: Publish @alpaca-open-api/core
+        run: |
+          VER="${GITHUB_REF_NAME#v}"
+          if npm view "@alpaca-open-api/core@$VER" version >/dev/null 2>&1; then
+            echo "@alpaca-open-api/core@$VER already published; skipping"
+          else
+            npm publish --workspace @alpaca-open-api/core --provenance --access public
+          fi
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+
+      - name: Publish @alpaca-open-api/mcp
+        run: |
+          VER="${GITHUB_REF_NAME#v}"
+          if npm view "@alpaca-open-api/mcp@$VER" version >/dev/null 2>&1; then
+            echo "@alpaca-open-api/mcp@$VER already published; skipping"
+          else
+            npm publish --workspace @alpaca-open-api/mcp --provenance --access public
+          fi
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
