@@ -1,16 +1,12 @@
-<pre>
-▄██       🤖 MCP server: every Alpaca endpoint as a tool
- ██       🧩 Typed clients for all 4 APIs
- ██████▄  🛰️ Trading · Data · Broker · AuthX (269 tools)
- ▀ ▀ ▀ ▀  🔒 One auth seam, host + auth per API
-          ⚡ Bun-native, generated from OpenAPI specs
-</pre>
-
-<div align="center">
-
 # 🦙 alpaca-open-api
 
-**Typed TypeScript clients + a ready-to-run MCP server for the [Alpaca Markets](https://alpaca.markets/) API — fully generated from the official OpenAPI specs.**
+- 🤖 **MCP server** — **All** Alpaca endpoint to Claude, Cursor, VS Code and friends as `alpaca_<operationId>` tools. One `npx`, zero config
+files.
+- 🧩 **Typed clients** — `tradingApi`, `dataApi`, `brokerApi`, `authxApi` with full request/response types straight from the specs.
+- 🛰️ **All four APIs** — Trading, Market Data, Broker, and AuthX, up to **269 tools**.
+- 🔒 **One auth seam** — every call routes through a single tiny mutator that resolves host + auth per API.
+- ⚡ **Bun-native** & generated-first — almost everything is produced from the official OpenAPI specs with [Orval](https://orval.dev/), so it stays in
+ lockstep with Alpaca.
 
 [![mcp on npm](https://img.shields.io/npm/v/@alpaca-open-api/mcp?logo=npm&label=%40alpaca-open-api%2Fmcp&color=CB3837)](https://www.npmjs.com/package/@alpaca-open-api/mcp)
 [![core on npm](https://img.shields.io/npm/v/@alpaca-open-api/core?logo=npm&label=%40alpaca-open-api%2Fcore&color=CB3837)](https://www.npmjs.com/package/@alpaca-open-api/core)
