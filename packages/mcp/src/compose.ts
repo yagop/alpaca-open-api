@@ -39,7 +39,7 @@ export function buildServer(
   enabledToolsets: string[] = DEFAULT_TOOLSETS,
 ): { server: McpServer; count: number } {
   const server = new McpServer(
-    { name: 'alpaca-api', version: '1.0.0' },
+    { name: 'alpaca-api', version: '1.0.1' },
     { capabilities: { tools: {} } },
   );
   const used = new Set<string>();
