@@ -1,6 +1,6 @@
 {
   "name": "@alpaca-open-api/core",
-  "version": "0.1.0",
+  "version": "1.0.0",
   "description": "Typed fetch clients and types for the Alpaca Markets API, generated from the official OpenAPI specifications with Orval",
   "type": "module",
   "main": "./dist/index.js",
