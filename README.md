@@ -1,12 +1,4 @@
-# 🦙 alpaca-open-api
-
-- 🤖 **MCP server** — **All** Alpaca endpoint to Claude, Cursor, VS Code and friends as `alpaca_<operationId>` tools. One `npx`, zero config
-files.
-- 🧩 **Typed clients** — `tradingApi`, `dataApi`, `brokerApi`, `authxApi` with full request/response types straight from the specs.
-- 🛰️ **All four APIs** — Trading, Market Data, Broker, and AuthX, up to **269 tools**.
-- 🔒 **One auth seam** — every call routes through a single tiny mutator that resolves host + auth per API.
-- ⚡ **Bun-native** & generated-first — almost everything is produced from the official OpenAPI specs with [Orval](https://orval.dev/), so it stays in
- lockstep with Alpaca.
+<h1 align="center">🦙 alpaca-open-api</h1>
 
 [![mcp on npm](https://img.shields.io/npm/v/@alpaca-open-api/mcp?logo=npm&label=%40alpaca-open-api%2Fmcp&color=CB3837)](https://www.npmjs.com/package/@alpaca-open-api/mcp)
 [![core on npm](https://img.shields.io/npm/v/@alpaca-open-api/core?logo=npm&label=%40alpaca-open-api%2Fcore&color=CB3837)](https://www.npmjs.com/package/@alpaca-open-api/core)
@@ -14,6 +6,10 @@ files.
 [![tools](https://img.shields.io/badge/tools-269-22C55E)](#-tools)
 [![built with Bun](https://img.shields.io/badge/built%20with-Bun-000000?logo=bun)](https://bun.sh/)
 [![license: MIT](https://img.shields.io/badge/license-MIT-blue)](LICENSE)
+
+- 🤖 **MCP server** — every Alpaca endpoint as an `alpaca_<operationId>` tool, via one `npx`.
+- ⚡ **Typed clients** — `tradingApi`, `dataApi`, `brokerApi`, `authxApi`, fully typed.
+- 🛰️ **All four APIs** — Trading, Data, Broker, AuthX — up to **269 tools**.
 
 ---
 
