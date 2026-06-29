@@ -33,7 +33,7 @@ async function connect(enabledToolsets?: string[]): Promise<Client> {
 test('registers trading and data toolsets by default with object input schemas', async () => {
   const client = await connect();
   const { tools } = await client.listTools();
-  expect(tools.length).toBe(114);
+  expect(tools.length).toBe(118);
   const names = new Set(tools.map((t) => t.name));
   expect(names.has('alpaca_getAccount')).toBe(true);
   expect(names.has('alpaca_postOrder')).toBe(true);
@@ -47,7 +47,7 @@ test('registers trading and data toolsets by default with object input schemas',
 test('explicitly registering all toolsets exposes the full Alpaca surface', async () => {
   const client = await connect(['trading', 'data', 'broker', 'authx']);
   const { tools } = await client.listTools();
-  expect(tools.length).toBe(269);
+  expect(tools.length).toBe(273);
   const names = new Set(tools.map((t) => t.name));
   expect(names.has('alpaca_getAccount')).toBe(true);
   expect(names.has('alpaca_stockLatestQuoteSingle')).toBe(true);
