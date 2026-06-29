@@ -3,13 +3,13 @@
 [![mcp on npm](https://img.shields.io/npm/v/@alpaca-open-api/mcp?logo=npm&label=%40alpaca-open-api%2Fmcp&color=CB3837)](https://www.npmjs.com/package/@alpaca-open-api/mcp)
 [![core on npm](https://img.shields.io/npm/v/@alpaca-open-api/core?logo=npm&label=%40alpaca-open-api%2Fcore&color=CB3837)](https://www.npmjs.com/package/@alpaca-open-api/core)
 [![MCP ready](https://img.shields.io/badge/MCP-ready-6E56CF?logo=anthropic)](https://modelcontextprotocol.io/)
-[![tools](https://img.shields.io/badge/tools-269-22C55E)](#-tools)
+[![tools](https://img.shields.io/badge/tools-273-22C55E)](#-tools)
 [![built with Bun](https://img.shields.io/badge/built%20with-Bun-000000?logo=bun)](https://bun.sh/)
 [![license: MIT](https://img.shields.io/badge/license-MIT-blue)](LICENSE)
 
 - 🤖 **[MCP server](https://github.com/yagop/alpaca-open-api#-mcp-server-alpaca-open-apimcp)** — every Alpaca endpoint as an `alpaca_<operationId>` tool, via one `npx`.
 - ⚡ **[Typed clients](https://github.com/yagop/alpaca-open-api#-library-alpaca-open-apicore)** — `tradingApi`, `dataApi`, `brokerApi`, `authxApi`, fully typed.
-- 🛰️ **All four APIs** — Trading, Data, Broker, AuthX — up to **269 tools**.
+- 🛰️ **All four APIs** — Trading, Data, Broker, AuthX — up to **273 tools**.
 
 ---
 
@@ -144,7 +144,7 @@ Everything is configured through environment variables:
 | `ALPACA_API_KEY` | ✅ | — | API key (live and paper keys are different) |
 | `ALPACA_API_SECRET` | ✅ | — | API secret |
 | `ALPACA_ENV` | | `live` | `paper` or `live`. Selects paper/live (trading) and sandbox/production (broker, authx). |
-| `ALPACA_TOOLSETS` | | `trading,data` | Comma-separated subset to expose: `trading,data,broker,authx`. Add `broker,authx` for the full ~269-tool surface. |
+| `ALPACA_TOOLSETS` | | `trading,data` | Comma-separated subset to expose: `trading,data,broker,authx`. Add `broker,authx` for the full ~273-tool surface. |
 | `ALPACA_TRADING_URL` / `ALPACA_DATA_URL` / `ALPACA_BROKER_URL` / `ALPACA_AUTHX_URL` | | per-API defaults | Override the base URL for a specific API. |
 
 ### 🛟 Safety
@@ -153,7 +153,7 @@ Everything is configured through environment variables:
 
 ### 🧰 Tools
 
-Every enabled Alpaca operation is registered as its own tool, `alpaca_<operationId>`. By default the server registers the `trading` and `data` toolsets (**114 tools**); set `ALPACA_TOOLSETS=trading,data,broker,authx` to expose the full **269-tool** surface across all four APIs. Each tool's input is a Zod schema generated from the OpenAPI spec, with arguments grouped into `pathParams`, `queryParams`, and `bodyParams`, and validated before the call:
+Every enabled Alpaca operation is registered as its own tool, `alpaca_<operationId>`. By default the server registers the `trading` and `data` toolsets (**118 tools**); set `ALPACA_TOOLSETS=trading,data,broker,authx` to expose the full **273-tool** surface across all four APIs. Each tool's input is a Zod schema generated from the OpenAPI spec, with arguments grouped into `pathParams`, `queryParams`, and `bodyParams`, and validated before the call:
 
 | Tool | Example arguments |
 | --- | --- |

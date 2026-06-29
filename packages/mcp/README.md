@@ -5,12 +5,12 @@
 <p align="center">
 <a href="https://www.npmjs.com/package/@alpaca-open-api/mcp"><img src="https://img.shields.io/npm/v/@alpaca-open-api/mcp?logo=npm&color=CB3837" alt="npm"></a>
 <a href="https://modelcontextprotocol.io/"><img src="https://img.shields.io/badge/MCP-ready-6E56CF" alt="MCP ready"></a>
-<img src="https://img.shields.io/badge/tools-269-22C55E" alt="tools">
+<img src="https://img.shields.io/badge/tools-273-22C55E" alt="tools">
 <a href="https://github.com/yagop/alpaca-open-api/blob/main/LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue" alt="license: MIT"></a>
 </p>
 
 - 🤖 Every Alpaca endpoint as an `alpaca_<operationId>` MCP tool, via one `npx`.
-- 🛰️ Trading, Market Data, Broker, AuthX — up to **269 tools**.
+- 🛰️ Trading, Market Data, Broker, AuthX — up to **273 tools**.
 - 🔒 Host + auth resolved per API; inputs validated by Zod schemas generated from the OpenAPI specs.
 
 ## Install
@@ -58,7 +58,7 @@ claude mcp add alpaca \
 | `ALPACA_API_KEY` | ✅ | — | API key (live and paper keys are different) |
 | `ALPACA_API_SECRET` | ✅ | — | API secret |
 | `ALPACA_ENV` | | `live` | `paper` or `live` |
-| `ALPACA_TOOLSETS` | | `trading,data` | Comma-separated subset to expose: `trading,data,broker,authx` (all four = ~269 tools) |
+| `ALPACA_TOOLSETS` | | `trading,data` | Comma-separated subset to expose: `trading,data,broker,authx` (all four = ~273 tools) |
 
 > ⚠️ The server **defaults to `live`** and allows order placement in the default `trading` toolset. Use `ALPACA_ENV=paper` with your paper keys while you experiment. Live and paper API keys differ.
 
