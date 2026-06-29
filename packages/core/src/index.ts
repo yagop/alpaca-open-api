@@ -15,6 +15,11 @@ export { API_ROUTING } from './api-routing';
 export type { ApiMeta, AuthStrategy } from './api-routing';
 export { makeMutator, tradingMutator, dataMutator, brokerMutator, authxMutator } from './mutator';
 
+// Per-request credential context for remote (HTTP) deployments - the mutator reads
+// it when set, else falls back to the process environment (stdio mode).
+export { reqCtx } from './request-context';
+export type { Creds, CredsStore, AlpacaEnv } from './request-context';
+
 // Typed fetch clients, one namespace per API - e.g. `tradingApi.getAccount()`,
 // `dataApi.stockLatestQuoteSingle(...)`. Credentials/host come from the env the
 // mutator reads (ALPACA_API_KEY/SECRET, ALPACA_ENV).

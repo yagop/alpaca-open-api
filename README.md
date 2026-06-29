@@ -141,11 +141,32 @@ Everything is configured through environment variables:
 
 | Variable | Required | Default | Purpose |
 | --- | :---: | --- | --- |
-| `ALPACA_API_KEY` | ✅ | — | API key (live and paper keys are different) |
-| `ALPACA_API_SECRET` | ✅ | — | API secret |
+| `ALPACA_API_KEY` | ✅ (stdio) | — | API key (live and paper keys are different) |
+| `ALPACA_API_SECRET` | ✅ (stdio) | — | API secret |
 | `ALPACA_ENV` | | `live` | `paper` or `live`. Selects paper/live (trading) and sandbox/production (broker, authx). |
 | `ALPACA_TOOLSETS` | | `trading,data` | Comma-separated subset to expose: `trading,data,broker,authx`. Add `broker,authx` for the full ~273-tool surface. |
 | `ALPACA_TRADING_URL` / `ALPACA_DATA_URL` / `ALPACA_BROKER_URL` / `ALPACA_AUTHX_URL` | | per-API defaults | Override the base URL for a specific API. |
+| `ALPACA_TRANSPORT` | | `stdio` | `stdio` or `http` (also `--transport`). See [remote mode](#-remote-mode-streamable-http). |
+| `ALPACA_HTTP_PORT` / `ALPACA_HTTP_HOST` / `ALPACA_HTTP_PATH` | | `3000` / `127.0.0.1` / `/mcp` | Listen address for the `http` transport. |
+
+### 🌐 Remote mode (streamable-http)
+
+The default **stdio** transport is single-tenant: it trusts one set of credentials from
+the environment. For a hosted, multi-tenant deployment, start the opt-in **streamable-http**
+transport instead:
+
+```bash
+npx @alpaca-open-api/mcp --transport http   # or ALPACA_TRANSPORT=http
+```
+
+The server then holds **no secrets of its own** and acts as a pure pass-through proxy:
+each request supplies its own Alpaca keys in headers — `APCA-API-KEY-ID`,
+`APCA-API-SECRET-KEY`, and `X-Alpaca-Env: paper|live` — and possession of valid keys *is*
+the authorization. Credential-less requests are **rejected** (no environment fallback), so
+an open endpoint can't be turned into a confused deputy borrowing the server's keys. It
+binds to loopback by default; front it with a TLS proxy before exposing it, and never log
+the credential headers. (AuthX is the one asymmetry: its form-encoded `oauth/token` flow
+carries credentials in the body, not headers.)
 
 ### 🛟 Safety
 
