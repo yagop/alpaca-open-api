@@ -88,6 +88,17 @@ test('forwards an Authorization: Bearer token to the upstream Alpaca call', asyn
   expect(captured?.headers['APCA-API-KEY-ID']).toBeUndefined();
 });
 
+test('selects the paper host from the ?env=paper URL query (no env header)', async () => {
+  const res = await realFetch(`${origin}/mcp?env=paper`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json', accept: ACCEPT, Authorization: 'Bearer OAUTH-TOKEN' },
+    body: callBody('alpaca_getAccount'),
+  });
+  expect(res.status).toBe(200);
+  expect(captured?.url).toBe('https://paper-api.alpaca.markets/v2/account');
+  expect(captured?.headers['Authorization']).toBe('Bearer OAUTH-TOKEN');
+});
+
 test('defaults to the live host when X-Alpaca-Env is omitted', async () => {
   await realFetch(`${origin}/mcp`, {
     method: 'POST',

@@ -20,7 +20,7 @@
 
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http';
 import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
-import { reqCtx, type Creds } from '@alpaca-open-api/core';
+import { reqCtx, type Creds, type AlpacaEnv } from '@alpaca-open-api/core';
 import { buildServer } from './compose';
 
 /** Per-request credential headers (Node lower-cases incoming header names). */
@@ -50,6 +50,16 @@ const firstHeader = (req: IncomingMessage, name: string): string | undefined => 
 };
 
 /**
+ * Resolves the target environment for a request. Header-less hosts (Claude Web) can't
+ * set `X-Alpaca-Env`, so it also reads an `?env=paper` query param from the connector
+ * URL; the header wins when both are present. Anything but `paper` means `live`.
+ */
+const resolveEnv = (req: IncomingMessage, url: URL): AlpacaEnv => {
+  const value = firstHeader(req, ENV_HEADER) ?? url.searchParams.get('env') ?? '';
+  return value.toLowerCase() === 'paper' ? 'paper' : 'live';
+};
+
+/**
  * Reads the per-request credentials from headers, accepting either pass-through shape:
  *
  * - `APCA-API-KEY-ID` + `APCA-API-SECRET-KEY` - the caller's Alpaca key/secret (clients
@@ -58,10 +68,9 @@ const firstHeader = (req: IncomingMessage, name: string): string | undefined => 
  *   like Claude Web, which authenticate via OAuth).
  *
  * Returns `undefined` when neither is present - the caller rejects such requests (no env
- * fallback). `x-alpaca-env: paper` selects the paper/sandbox hosts; anything else is live.
+ * fallback). `env` is resolved separately by {@link resolveEnv}.
  */
-const credsFromHeaders = (req: IncomingMessage): Creds | undefined => {
-  const env = firstHeader(req, ENV_HEADER)?.toLowerCase() === 'paper' ? 'paper' : 'live';
+const credsFromHeaders = (req: IncomingMessage, env: AlpacaEnv): Creds | undefined => {
   const key = firstHeader(req, KEY_HEADER);
   const secret = firstHeader(req, SECRET_HEADER);
   if (key && secret) return { key, secret, env };
@@ -86,12 +95,12 @@ const sendError = (res: ServerResponse, status: number, code: number, message: s
 export function createHttpServer(opts: HttpServerOptions = {}): Server {
   const path = opts.path ?? '/mcp';
   return createServer(async (req, res) => {
-    const pathname = new URL(req.url ?? '/', 'http://localhost').pathname;
-    if (pathname !== path) {
-      sendError(res, 404, -32601, `not found: ${pathname}`);
+    const url = new URL(req.url ?? '/', 'http://localhost');
+    if (url.pathname !== path) {
+      sendError(res, 404, -32601, `not found: ${url.pathname}`);
       return;
     }
-    const creds = credsFromHeaders(req);
+    const creds = credsFromHeaders(req, resolveEnv(req, url));
     if (!creds) {
       // No env fallback: a credential-less request is unauthorized, never served
       // with the server's own keys.
@@ -145,8 +154,8 @@ export async function runHttpServer(opts: HttpServerOptions = {}): Promise<Serve
   const toolsetsNote = opts.toolsets?.length ? ` (toolsets: ${opts.toolsets.join(', ')})` : '';
   process.stderr.write(
     `alpaca-api MCP server (streamable-http) ready - ${count} tools, listening on http://${host}:${port}${path}. ` +
-      `Credentials are read per request from the APCA-API-KEY-ID / APCA-API-SECRET-KEY headers ` +
-      `(X-Alpaca-Env: paper|live)${toolsetsNote}.\n`
+      `Credentials are read per request: APCA-API-KEY-ID / APCA-API-SECRET-KEY headers, or an ` +
+      `Authorization: Bearer Alpaca OAuth token. Env via X-Alpaca-Env header or ?env=paper${toolsetsNote}.\n`
   );
   return server;
 }
