@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, expect, test } from 'bun:test';
 import { makeMutator } from './mutator';
+import { reqCtx } from './request-context';
 
 // The mutator is the single HTTP layer behind every generated client (MCP tools
 // and the library's fetch clients). These tests stub `fetch` to capture the
@@ -105,4 +106,34 @@ test('passes the response headers through (the generated contracts type them)', 
 
 test('an unknown api throws', async () => {
   await expect(makeMutator('nope')('/x', { method: 'GET' })).rejects.toThrow('Unknown API: nope');
+});
+
+// Remote (HTTP) mode: credentials + environment come from the per-request `reqCtx`
+// store, not the process env. The store wins and there is no env fallback within it.
+
+test('per-request creds from reqCtx win over env (key/secret and paper host)', async () => {
+  // Env points at live with KEY/SECRET; the request store must override both.
+  process.env.ALPACA_ENV = 'live';
+  await reqCtx.run({ key: 'REQ-KEY', secret: 'REQ-SECRET', env: 'paper' }, async () => {
+    await makeMutator('trading')('/v2/account', { method: 'GET' });
+  });
+  expect(captured?.url).toBe('https://paper-api.alpaca.markets/v2/account');
+  expect(captured?.headers['APCA-API-KEY-ID']).toBe('REQ-KEY');
+  expect(captured?.headers['APCA-API-SECRET-KEY']).toBe('REQ-SECRET');
+});
+
+test('per-request env=live selects the live host (broker basic auth from store creds)', async () => {
+  // Without a store, broker resolves to the sandbox host; the store's env drives it.
+  await reqCtx.run({ key: 'REQ-KEY', secret: 'REQ-SECRET', env: 'live' }, async () => {
+    await makeMutator('broker')('/v1/accounts', { method: 'GET' });
+  });
+  expect(captured?.url).toBe('https://broker-api.alpaca.markets/v1/accounts');
+  expect(captured?.headers['Authorization']).toBe(`Basic ${Buffer.from('REQ-KEY:REQ-SECRET').toString('base64')}`);
+});
+
+test('falls back to the process env when no reqCtx store is set', async () => {
+  process.env.ALPACA_ENV = 'paper';
+  await makeMutator('trading')('/v2/account', { method: 'GET' });
+  expect(captured?.url).toBe('https://paper-api.alpaca.markets/v2/account');
+  expect(captured?.headers['APCA-API-KEY-ID']).toBe('KEY');
 });
