@@ -71,6 +71,23 @@ test('passes per-request header credentials through to the upstream Alpaca call'
   expect(captured?.headers['APCA-API-SECRET-KEY']).toBe('REQ-SECRET');
 });
 
+test('forwards an Authorization: Bearer token to the upstream Alpaca call', async () => {
+  const res = await realFetch(`${origin}/mcp`, {
+    method: 'POST',
+    headers: {
+      'content-type': 'application/json',
+      accept: ACCEPT,
+      Authorization: 'Bearer OAUTH-TOKEN',
+      'X-Alpaca-Env': 'paper',
+    },
+    body: callBody('alpaca_getAccount'),
+  });
+  expect(res.status).toBe(200);
+  expect(captured?.url).toBe('https://paper-api.alpaca.markets/v2/account');
+  expect(captured?.headers['Authorization']).toBe('Bearer OAUTH-TOKEN');
+  expect(captured?.headers['APCA-API-KEY-ID']).toBeUndefined();
+});
+
 test('defaults to the live host when X-Alpaca-Env is omitted', async () => {
   await realFetch(`${origin}/mcp`, {
     method: 'POST',

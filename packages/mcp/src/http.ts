@@ -27,6 +27,8 @@ import { buildServer } from './compose';
 const KEY_HEADER = 'apca-api-key-id';
 const SECRET_HEADER = 'apca-api-secret-key';
 const ENV_HEADER = 'x-alpaca-env';
+const AUTH_HEADER = 'authorization';
+const BEARER_PREFIX = 'bearer ';
 
 export type HttpServerOptions = {
   /** The single MCP endpoint path. Default `/mcp`. */
@@ -48,16 +50,27 @@ const firstHeader = (req: IncomingMessage, name: string): string | undefined => 
 };
 
 /**
- * Reads the per-request Alpaca credentials from headers. Returns `undefined` when
- * the key or secret is missing - the caller rejects such requests (no env fallback).
- * `x-alpaca-env: paper` selects the paper/sandbox hosts; anything else means live.
+ * Reads the per-request credentials from headers, accepting either pass-through shape:
+ *
+ * - `APCA-API-KEY-ID` + `APCA-API-SECRET-KEY` - the caller's Alpaca key/secret (clients
+ *   that can set headers); or
+ * - `Authorization: Bearer <token>` - an Alpaca OAuth2 access token (header-less hosts
+ *   like Claude Web, which authenticate via OAuth).
+ *
+ * Returns `undefined` when neither is present - the caller rejects such requests (no env
+ * fallback). `x-alpaca-env: paper` selects the paper/sandbox hosts; anything else is live.
  */
 const credsFromHeaders = (req: IncomingMessage): Creds | undefined => {
+  const env = firstHeader(req, ENV_HEADER)?.toLowerCase() === 'paper' ? 'paper' : 'live';
   const key = firstHeader(req, KEY_HEADER);
   const secret = firstHeader(req, SECRET_HEADER);
-  if (!key || !secret) return undefined;
-  const env = firstHeader(req, ENV_HEADER)?.toLowerCase() === 'paper' ? 'paper' : 'live';
-  return { key, secret, env };
+  if (key && secret) return { key, secret, env };
+  const auth = firstHeader(req, AUTH_HEADER);
+  if (auth?.toLowerCase().startsWith(BEARER_PREFIX)) {
+    const token = auth.slice(BEARER_PREFIX.length).trim();
+    if (token) return { token, env };
+  }
+  return undefined;
 };
 
 /** Writes a JSON-RPC-shaped error response (the body the transport would also emit). */
@@ -82,7 +95,7 @@ export function createHttpServer(opts: HttpServerOptions = {}): Server {
     if (!creds) {
       // No env fallback: a credential-less request is unauthorized, never served
       // with the server's own keys.
-      sendError(res, 401, -32001, `missing Alpaca credentials (${KEY_HEADER} / ${SECRET_HEADER} headers)`);
+      sendError(res, 401, -32001, `missing Alpaca credentials (${KEY_HEADER} / ${SECRET_HEADER} headers, or ${AUTH_HEADER}: Bearer)`);
       return;
     }
     // Stateless, fresh per request: no shared session or JSON-RPC id state, and the
