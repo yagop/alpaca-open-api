@@ -137,3 +137,31 @@ test('falls back to the process env when no reqCtx store is set', async () => {
   expect(captured?.url).toBe('https://paper-api.alpaca.markets/v2/account');
   expect(captured?.headers['APCA-API-KEY-ID']).toBe('KEY');
 });
+
+// OAuth bearer credential (header-less hosts): an Alpaca OAuth2 token is forwarded as
+// `Authorization: Bearer`, never as the APCA key headers.
+
+test('a bearer creds store sends Authorization: Bearer, not APCA headers (paper host)', async () => {
+  process.env.ALPACA_ENV = 'live';
+  await reqCtx.run({ token: 'OAUTH-TOKEN', env: 'paper' }, async () => {
+    await makeMutator('trading')('/v2/account', { method: 'GET' });
+  });
+  expect(captured?.url).toBe('https://paper-api.alpaca.markets/v2/account');
+  expect(captured?.headers['Authorization']).toBe('Bearer OAUTH-TOKEN');
+  expect(captured?.headers['APCA-API-KEY-ID']).toBeUndefined();
+  expect(captured?.headers['APCA-API-SECRET-KEY']).toBeUndefined();
+});
+
+test('a bearer creds store selects the live host and the data API too', async () => {
+  await reqCtx.run({ token: 'OAUTH-TOKEN', env: 'live' }, async () => {
+    await makeMutator('trading')('/v2/account', { method: 'GET' });
+  });
+  expect(captured?.url).toBe('https://api.alpaca.markets/v2/account');
+  expect(captured?.headers['Authorization']).toBe('Bearer OAUTH-TOKEN');
+
+  await reqCtx.run({ token: 'OAUTH-TOKEN', env: 'live' }, async () => {
+    await makeMutator('data')('/v2/stocks/quotes/latest?symbols=AAPL', { method: 'GET' });
+  });
+  expect(captured?.url).toBe('https://data.alpaca.markets/v2/stocks/quotes/latest?symbols=AAPL');
+  expect(captured?.headers['Authorization']).toBe('Bearer OAUTH-TOKEN');
+});

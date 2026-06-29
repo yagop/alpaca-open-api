@@ -26,7 +26,7 @@ const ENV_URL: Record<string, string> = {
 };
 
 /** The credentials + target environment in effect for a single outgoing request. */
-type ResolvedCreds = { key: string; secret: string; paper: boolean };
+type ResolvedCreds = { key: string; secret: string; bearer?: string; paper: boolean };
 
 /**
  * True only when explicitly opting into paper/sandbox hosts via `ALPACA_ENV=paper`
@@ -47,7 +47,12 @@ function isPaperEnv(): boolean {
  */
 function currentCreds(): ResolvedCreds {
   const c = reqCtx.getStore();
-  if (c) return { key: c.key, secret: c.secret, paper: c.env === 'paper' };
+  if (c) {
+    const paper = c.env === 'paper';
+    // OAuth bearer (header-less hosts) vs. APCA key/secret pass-through.
+    if ('token' in c) return { key: '', secret: '', bearer: c.token, paper };
+    return { key: c.key, secret: c.secret, paper };
+  }
   return {
     key: process.env.ALPACA_API_KEY ?? '',
     secret: process.env.ALPACA_API_SECRET ?? '',
@@ -68,7 +73,7 @@ function resolveHost(api: string, creds: ResolvedCreds): string {
 
 /** Adds the API's auth to the outgoing headers (the generated client supplies body + Content-Type). */
 function authHeaders(api: string, creds: ResolvedCreds): Record<string, string> {
-  const { key, secret } = creds;
+  const { key, secret, bearer } = creds;
   switch (API_ROUTING[api]?.auth) {
     case 'basic':
       return { Authorization: `Basic ${Buffer.from(`${key}:${secret}`).toString('base64')}` };
@@ -76,7 +81,11 @@ function authHeaders(api: string, creds: ResolvedCreds): Record<string, string> 
       // AuthX is form-encoded with credentials carried in the (caller-supplied) body.
       return {};
     default:
-      return { 'APCA-API-KEY-ID': key, 'APCA-API-SECRET-KEY': secret };
+      // apca APIs (trading, data): an Alpaca OAuth2 bearer authenticates via
+      // `Authorization: Bearer`; otherwise the caller's key/secret go in the APCA headers.
+      return bearer
+        ? { Authorization: `Bearer ${bearer}` }
+        : { 'APCA-API-KEY-ID': key, 'APCA-API-SECRET-KEY': secret };
   }
 }
 

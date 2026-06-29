@@ -16,13 +16,23 @@
 
 import { AsyncLocalStorage } from 'node:async_hooks';
 
-/** Request-scoped Alpaca credentials: API key/secret and which hosts to target. */
-export type Creds = {
-  key: string;
-  secret: string;
-  /** Selects the live or paper/sandbox host per API (live and paper keys differ). */
-  env: 'paper' | 'live';
-};
+/** Selects the live or paper/sandbox host per API (live and paper keys differ). */
+export type AlpacaEnv = 'paper' | 'live';
+
+/**
+ * The credential that authenticates a single proxied request to Alpaca - one of two
+ * pass-through shapes, both carrying the target {@link AlpacaEnv}:
+ *
+ * - `{ key, secret }` - the caller's Alpaca API key/secret, sent as `APCA-API-KEY-ID`
+ *   / `APCA-API-SECRET-KEY` (for clients that can set headers / local use).
+ * - `{ token }` - an Alpaca **OAuth2** access token, sent as `Authorization: Bearer`
+ *   (for header-less hosts like Claude Web that authenticate via OAuth).
+ *
+ * Either way the server holds no secrets of its own; the credential is the caller's.
+ */
+export type Creds =
+  | { key: string; secret: string; env: AlpacaEnv }
+  | { token: string; env: AlpacaEnv };
 
 /**
  * The two operations callers need from the store: run a function with credentials
