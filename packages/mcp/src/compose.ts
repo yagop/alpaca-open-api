@@ -52,15 +52,15 @@ const tryParse = (text: string): unknown => {
   }
 };
 
+type StrippedResult = Omit<HandlerResult, 'structuredContent'>;
+
 /**
- * Drops `structuredContent` (we declare no outputSchema) and, for untrusted
- * free-text ops, wraps the payload in a `{ _alpaca_mcp_security, data }` envelope.
+ * Re-frames an untrusted free-text result as `{ _alpaca_mcp_security, data }`.
+ * The handler returns the API JSON as a single text block, so we parse it back
+ * into `data` (otherwise the model sees doubly-escaped JSON-in-a-string); non-JSON
+ * text falls back to itself.
  */
-const stripResult = (
-  op: string,
-  { structuredContent: _omit, ...result }: HandlerResult,
-): Omit<HandlerResult, 'structuredContent'> => {
-  if (!UNTRUSTED_TEXT_OPS.has(op)) return result;
+const sealUntrusted = (op: string, result: StrippedResult): StrippedResult => {
   const payload = result.content.map((c) => c.text).join('\n');
   const envelope = {
     _alpaca_mcp_security: {
@@ -72,6 +72,16 @@ const stripResult = (
   };
   return { ...result, content: [{ type: 'text', text: JSON.stringify(envelope) }] };
 };
+
+/**
+ * Drops `structuredContent` (we declare no outputSchema), then seals untrusted
+ * free-text ops in a trust-boundary envelope - every other op passes through.
+ */
+const stripResult = (
+  op: string,
+  { structuredContent: _omit, ...result }: HandlerResult,
+): StrippedResult =>
+  UNTRUSTED_TEXT_OPS.has(op) ? sealUntrusted(op, result) : result;
 
 /**
  * Builds a registered {@link McpServer} (no transport connected). By default,
