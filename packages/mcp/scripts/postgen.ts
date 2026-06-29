@@ -82,7 +82,10 @@ const generateRegister = (api: string, apiDir: string): void => {
       );
     } else {
       // Form-encoded body with no generated Zod: validate permissively, then cast
-      // the validated args to the handler's own parameter type.
+      // the validated args to the handler's own parameter type. Orval emits Zod
+      // only for JSON request bodies; application/x-www-form-urlencoded is skipped,
+      // so this is the one cast in the generated surface. Upstream: a precise
+      // schema here would remove it - orval-labs/orval#3664.
       usesZod = true;
       calls.push(
         `  server.registerTool(${head}, inputSchema: { bodyParams: z.record(z.string(), z.string()) } }, async (args) => ctx.strip(await handlers.${op}Handler(args as unknown as Parameters<typeof handlers.${op}Handler>[0])));`,
