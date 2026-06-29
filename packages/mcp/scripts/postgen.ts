@@ -63,7 +63,7 @@ const generateRegister = (api: string, apiDir: string): void => {
 
     if (match[2] !== 'args') {
       calls.push(
-        `  server.registerTool(${head} }, async () => ctx.strip(await handlers.${op}Handler()));`,
+        `  server.registerTool(${head} }, async () => ctx.strip('${op}', await handlers.${op}Handler()));`,
       );
       continue;
     }
@@ -78,14 +78,14 @@ const generateRegister = (api: string, apiDir: string): void => {
     if (parts.length > 0) {
       usesSchemas = true;
       calls.push(
-        `  server.registerTool(${head}, inputSchema: { ${parts.join(', ')} } }, async (args) => ctx.strip(await handlers.${op}Handler(args)));`,
+        `  server.registerTool(${head}, inputSchema: { ${parts.join(', ')} } }, async (args) => ctx.strip('${op}', await handlers.${op}Handler(args)));`,
       );
     } else {
       // Form-encoded body with no generated Zod: validate permissively, then cast
       // the validated args to the handler's own parameter type.
       usesZod = true;
       calls.push(
-        `  server.registerTool(${head}, inputSchema: { bodyParams: z.record(z.string(), z.string()) } }, async (args) => ctx.strip(await handlers.${op}Handler(args as unknown as Parameters<typeof handlers.${op}Handler>[0])));`,
+        `  server.registerTool(${head}, inputSchema: { bodyParams: z.record(z.string(), z.string()) } }, async (args) => ctx.strip('${op}', await handlers.${op}Handler(args as unknown as Parameters<typeof handlers.${op}Handler>[0])));`,
       );
     }
   }

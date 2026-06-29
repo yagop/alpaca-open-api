@@ -20,6 +20,13 @@ export type RegisterContext = {
   tool: (op: string) => string;
   /** Returns the tool description for an operation. */
   describe: (op: string) => string;
-  /** Drops `structuredContent` so the SDK accepts the result (no outputSchema). */
-  strip: (result: HandlerResult) => Omit<HandlerResult, 'structuredContent'>;
+  /**
+   * Drops `structuredContent` so the SDK accepts the result (no outputSchema),
+   * and wraps untrusted free-text tool output (keyed by `op`) in a trust-boundary
+   * envelope - see `compose.ts`.
+   */
+  strip: (
+    op: string,
+    result: HandlerResult,
+  ) => Omit<HandlerResult, 'structuredContent'>;
 };
