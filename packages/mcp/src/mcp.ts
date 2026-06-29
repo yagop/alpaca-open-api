@@ -9,11 +9,12 @@
  * supplies the host + auth. This file only handles the CLI: flags, env, and which
  * transport to connect.
  *
- * Two transports:
- *   - `stdio` (default) - single-tenant; credentials come from the process env.
+ * This file is a thin dispatcher: it parses flags/env, picks a transport, and hands
+ * off to that transport's runner. The transports live in their own modules:
+ *   - `stdio` (default) - single-tenant; credentials from the process env (`./stdio.ts`).
  *   - `streamable-http` (opt-in via `--transport http` / `ALPACA_TRANSPORT=http`) -
  *     multi-tenant; the server holds no secrets and each request carries its own
- *     Alpaca credentials in headers (see `./http.ts`).
+ *     Alpaca credentials in headers (`./http.ts`).
  *
  * Published as the `@alpaca-open-api/mcp` CLI - `npx @alpaca-open-api/mcp`
  * (or `bun run src/mcp.ts`). Configure via environment variables:
@@ -26,9 +27,8 @@
  *   ALPACA_HTTP_PORT / ALPACA_HTTP_HOST / ALPACA_HTTP_PATH   (http transport; default 3000 / 127.0.0.1 / /mcp)
  */
 
-import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
-import { buildServer } from './compose';
-import { startHttpServer } from './http';
+import { runHttpServer } from './http';
+import { runStdioServer } from './stdio';
 import { version } from '../package.json';
 
 const argv = process.argv.slice(2);
@@ -78,34 +78,16 @@ const enabledToolsets = toolsetsEnv
   : undefined;
 
 const transport = (flagValue('--transport') ?? process.env.ALPACA_TRANSPORT ?? 'stdio').toLowerCase();
-const toolsetsNote = enabledToolsets?.length ? ` (toolsets: ${enabledToolsets.join(', ')})` : '';
 
 if (transport === 'http' || transport === 'streamable-http') {
-  const port = Number(process.env.ALPACA_HTTP_PORT ?? 3000);
-  if (!Number.isInteger(port) || port < 0 || port > 65535) {
-    process.stderr.write(`Invalid ALPACA_HTTP_PORT: ${process.env.ALPACA_HTTP_PORT}\n`);
+  try {
+    await runHttpServer({ toolsets: enabledToolsets });
+  } catch (err) {
+    process.stderr.write(`${err instanceof Error ? err.message : String(err)}\n`);
     process.exit(1);
   }
-  const host = process.env.ALPACA_HTTP_HOST ?? '127.0.0.1';
-  const path = process.env.ALPACA_HTTP_PATH ?? '/mcp';
-  // One-time build to report the tool count (the http transport rebuilds per request).
-  const { count } = buildServer(enabledToolsets);
-  await startHttpServer({ port, host, path, toolsets: enabledToolsets });
-  process.stderr.write(
-    `alpaca-api MCP server (streamable-http) ready - ${count} tools, listening on http://${host}:${port}${path}. ` +
-      `Credentials are read per request from the APCA-API-KEY-ID / APCA-API-SECRET-KEY headers ` +
-      `(X-Alpaca-Env: paper|live)${toolsetsNote}.\n`
-  );
 } else if (transport === 'stdio') {
-  if (!process.env.ALPACA_API_KEY || !process.env.ALPACA_API_SECRET) {
-    process.stderr.write(
-      'Warning: ALPACA_API_KEY / ALPACA_API_SECRET are not set; calls will fail auth. ' +
-        'Defaulting to live - set ALPACA_ENV=paper for paper (keys differ between live and paper).\n'
-    );
-  }
-  const { server, count } = buildServer(enabledToolsets);
-  await server.connect(new StdioServerTransport());
-  process.stderr.write(`alpaca-api MCP server ready - ${count} tools registered${toolsetsNote}.\n`);
+  await runStdioServer({ toolsets: enabledToolsets });
 } else {
   process.stderr.write(`Unknown transport: ${transport} (expected 'stdio' or 'http').\n`);
   process.exit(1);

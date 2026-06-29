@@ -112,3 +112,28 @@ export function startHttpServer(opts: StartHttpServerOptions): Promise<Server> {
     server.listen(opts.port, host, () => resolve(server));
   });
 }
+
+/**
+ * CLI runner for the http transport: reads the `ALPACA_HTTP_*` env, starts the
+ * server, and writes a readiness banner to stderr. Throws on an invalid port. The
+ * factories above ({@link createHttpServer} / {@link startHttpServer}) carry no
+ * env or logging - those are what an embedding/serverless deployment imports.
+ */
+export async function runHttpServer(opts: HttpServerOptions = {}): Promise<Server> {
+  const port = Number(process.env.ALPACA_HTTP_PORT ?? 3000);
+  if (!Number.isInteger(port) || port < 0 || port > 65535) {
+    throw new Error(`Invalid ALPACA_HTTP_PORT: ${process.env.ALPACA_HTTP_PORT}`);
+  }
+  const host = process.env.ALPACA_HTTP_HOST ?? '127.0.0.1';
+  const path = process.env.ALPACA_HTTP_PATH ?? opts.path ?? '/mcp';
+  // One-time build to report the tool count (the transport rebuilds per request).
+  const { count } = buildServer(opts.toolsets);
+  const server = await startHttpServer({ port, host, path, toolsets: opts.toolsets });
+  const toolsetsNote = opts.toolsets?.length ? ` (toolsets: ${opts.toolsets.join(', ')})` : '';
+  process.stderr.write(
+    `alpaca-api MCP server (streamable-http) ready - ${count} tools, listening on http://${host}:${port}${path}. ` +
+      `Credentials are read per request from the APCA-API-KEY-ID / APCA-API-SECRET-KEY headers ` +
+      `(X-Alpaca-Env: paper|live)${toolsetsNote}.\n`
+  );
+  return server;
+}
