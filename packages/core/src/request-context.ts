@@ -25,8 +25,19 @@ export type Creds = {
 };
 
 /**
+ * The two operations callers need from the store: run a function with credentials
+ * bound for its (async) duration, and read the credentials bound to the current
+ * call. A deliberately narrow view of `AsyncLocalStorage` - it keeps the public API
+ * minimal and keeps the `node:async_hooks` types out of the published declarations.
+ */
+export interface CredsStore {
+  getStore(): Creds | undefined;
+  run<R>(creds: Creds, fn: () => R): R;
+}
+
+/**
  * The per-request credential store. Empty in stdio mode (the mutator falls back to
  * the process environment); populated per request by the HTTP transport. A single
  * shared instance, so the transport and the mutator read and write the same store.
  */
-export const reqCtx = new AsyncLocalStorage<Creds>();
+export const reqCtx: CredsStore = new AsyncLocalStorage<Creds>();
