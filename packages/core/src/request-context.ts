@@ -1,0 +1,32 @@
+/**
+ * Per-request credential context for remote (HTTP) deployments.
+ *
+ * In the default stdio deployment the {@link makeMutator | mutator} reads
+ * credentials from the process environment - the OS process boundary is the trust
+ * boundary, so one set of keys per process is correct. When the server is hosted
+ * over HTTP it is multi-tenant: each request carries its own Alpaca credentials and
+ * the server holds none of its own (possession of valid keys *is* the
+ * authorization). This `AsyncLocalStorage` carries those request-scoped credentials
+ * to the mutator without threading them through every generated handler/client
+ * signature - the HTTP transport wraps each request in `reqCtx.run(creds, ...)` and
+ * the mutator reads `reqCtx.getStore()`.
+ *
+ * @see ./mutator.ts - the single seam that consumes this.
+ */
+
+import { AsyncLocalStorage } from 'node:async_hooks';
+
+/** Request-scoped Alpaca credentials: API key/secret and which hosts to target. */
+export type Creds = {
+  key: string;
+  secret: string;
+  /** Selects the live or paper/sandbox host per API (live and paper keys differ). */
+  env: 'paper' | 'live';
+};
+
+/**
+ * The per-request credential store. Empty in stdio mode (the mutator falls back to
+ * the process environment); populated per request by the HTTP transport. A single
+ * shared instance, so the transport and the mutator read and write the same store.
+ */
+export const reqCtx = new AsyncLocalStorage<Creds>();
