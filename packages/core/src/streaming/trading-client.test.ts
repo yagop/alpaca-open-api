@@ -125,3 +125,40 @@ test('re-listens automatically after a reconnect, exactly once (no duplicate lis
     { action: 'listen', data: { streams: ['trade_updates'] } },
   ]);
 });
+
+// Golden payload from a real paper-account fill (a 1-share AAPL buy, captured live), trimmed to
+// the order fields that matter here. Regression: `event_id` was missing from `TradeUpdate`
+// entirely, and `at`/`settle_date` were undocumented in this codebase before this capture - all
+// three are present on every real event, not just fills.
+test('a real fill event\'s full field set (event_id, at, settle_date, ...) decodes as TradeUpdate', async () => {
+  MockSocket.instances = [];
+  const client = new TradingStreamClient({ apiKey: 'KEY', apiSecret: 'SECRET', WebSocketImpl: MockSocket as unknown as typeof WebSocket });
+  const socket = connectAndAuth(client);
+  await collect(client, 2); // open + authenticated
+
+  const fill = {
+    event: 'fill',
+    event_id: '01KWD8DCH5VMM1428KJREJK2GS',
+    at: '2026-06-30T21:54:22.740534Z',
+    timestamp: '2026-06-30T21:54:22.882534878Z',
+    price: '289.13',
+    qty: '1',
+    position_qty: '3',
+    execution_id: '31c5a793-576e-4e4c-9f3f-36cd636c8aeb',
+    settle_date: '2026-07-01',
+    order: {
+      id: '9e9ef395-90df-4252-a5b6-05eba5ef0446',
+      symbol: 'AAPL',
+      side: 'buy',
+      status: 'filled',
+      filled_avg_price: '289.13',
+      notional: null,
+      time_in_force: 'day',
+      type: 'limit',
+    },
+  } satisfies TradeUpdate;
+  socket.message(jsonFrame({ stream: 'trade_updates', data: fill }));
+
+  const [update] = await collect(client, 1);
+  expect((update as Extract<TradingStreamEvent, { type: 'trade_update' }>).update).toEqual(fill);
+});

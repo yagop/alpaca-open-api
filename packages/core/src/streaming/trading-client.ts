@@ -45,15 +45,25 @@ export type TradeUpdateEvent =
   | 'order_cancel_rejected'
   | (string & {});
 
-/** One `trade_updates` event - `price`/`qty`/`position_qty`/`execution_id` are only present for fill events. */
+/**
+ * One `trade_updates` event - `price`/`qty`/`position_qty`/`execution_id`/`settle_date` are only
+ * present for fill events. `at`/`event_id`/`timestamp` were confirmed live (a real paper
+ * buy+sell round trip) to be present on every event, including `pending_new`/`new`, not just
+ * fills - `event_id` in particular was entirely missing from this type before that.
+ */
 export interface TradeUpdate {
   event: TradeUpdateEvent;
   order: Order;
+  /** Unique ID for this specific update (distinct per `pending_new`/`new`/`fill`/... even for the same order). */
+  event_id?: string;
+  /** When Alpaca recorded the event - confirmed always close to but not always identical to `timestamp` (different precision). */
+  at?: string;
   timestamp?: string;
   execution_id?: string;
   price?: string;
   qty?: string;
   position_qty?: string;
+  settle_date?: string;
 }
 
 /** Everything `TradingStreamClient` can yield. */
