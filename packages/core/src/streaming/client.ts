@@ -59,6 +59,40 @@ const DEFAULT_RECONNECT: Required<ReconnectOptions> = { initialDelayMs: 500, max
 const WS_OPEN = 1;
 
 /**
+ * A minimal async pull queue - decouples push-style event emission from
+ * pull-style async iteration. Shared by `StreamClient` (for its raw `message`
+ * stream) and the typed per-stream clients built on top of it (trading,
+ * market data), so each doesn't reimplement the same buffering.
+ */
+export class AsyncQueue<T> implements AsyncIterable<T> {
+  private readonly items: T[] = [];
+  private readonly pulls: Array<(result: IteratorResult<T>) => void> = [];
+  private done = false;
+
+  push(item: T): void {
+    const pull = this.pulls.shift();
+    if (pull) pull({ value: item, done: false });
+    else this.items.push(item);
+  }
+
+  /** Ends the stream - pending and future `next()` calls resolve `{ done: true }`. */
+  end(): void {
+    this.done = true;
+    while (this.pulls.length) this.pulls.shift()!({ value: undefined as never, done: true });
+  }
+
+  [Symbol.asyncIterator](): AsyncIterator<T> {
+    return {
+      next: (): Promise<IteratorResult<T>> => {
+        if (this.items.length) return Promise.resolve({ value: this.items.shift() as T, done: false });
+        if (this.done) return Promise.resolve({ value: undefined as never, done: true });
+        return new Promise((resolve) => this.pulls.push(resolve));
+      },
+    };
+  }
+}
+
+/**
  * Connects, authenticates, tracks subscriptions for replay, and reconnects
  * with backoff. Subclasses (or callers) interpret decoded messages - this
  * class only emits the generic `message` event plus connection-lifecycle
@@ -71,9 +105,7 @@ export class StreamClient extends EventEmitter<StreamClientEvents> implements As
   private reconnectTimer: ReturnType<typeof setTimeout> | undefined;
   private idleTimer: ReturnType<typeof setTimeout> | undefined;
   private readonly subscriptions = new Map<string, unknown>();
-  private readonly queue: unknown[] = [];
-  private readonly pulls: Array<(result: IteratorResult<unknown>) => void> = [];
-  private iteratorDone = false;
+  private readonly messages = new AsyncQueue<unknown>();
   private readonly reconnectOpts: Required<ReconnectOptions> | false;
 
   constructor(private readonly options: StreamClientOptions) {
@@ -134,17 +166,11 @@ export class StreamClient extends EventEmitter<StreamClientEvents> implements As
     }
     this._state = 'closed';
     this.emit('close', { code, reason });
-    this.endIterator();
+    this.messages.end();
   }
 
   [Symbol.asyncIterator](): AsyncIterator<unknown> {
-    return {
-      next: (): Promise<IteratorResult<unknown>> => {
-        if (this.queue.length) return Promise.resolve({ value: this.queue.shift(), done: false });
-        if (this.iteratorDone) return Promise.resolve({ value: undefined, done: true });
-        return new Promise((resolve) => this.pulls.push(resolve));
-      },
-    };
+    return this.messages[Symbol.asyncIterator]();
   }
 
   private handleOpen(): void {
@@ -179,7 +205,7 @@ export class StreamClient extends EventEmitter<StreamClientEvents> implements As
       return;
     }
     this.emit('message', message);
-    this.pushToIterator(message);
+    this.messages.push(message);
   }
 
   private handleClose(code: number, reason: string): void {
@@ -192,7 +218,7 @@ export class StreamClient extends EventEmitter<StreamClientEvents> implements As
       return;
     }
     this.emit('close', { code, reason });
-    this.endIterator();
+    this.messages.end();
   }
 
   private scheduleReconnect(): void {
@@ -229,16 +255,5 @@ export class StreamClient extends EventEmitter<StreamClientEvents> implements As
     if (this.options.decode) return this.options.decode(data);
     if (typeof data !== 'string') throw new Error('stream: binary frame received but no decode() was configured');
     return JSON.parse(data);
-  }
-
-  private pushToIterator(message: unknown): void {
-    const pull = this.pulls.shift();
-    if (pull) pull({ value: message, done: false });
-    else this.queue.push(message);
-  }
-
-  private endIterator(): void {
-    this.iteratorDone = true;
-    while (this.pulls.length) this.pulls.shift()!({ value: undefined, done: true });
   }
 }
