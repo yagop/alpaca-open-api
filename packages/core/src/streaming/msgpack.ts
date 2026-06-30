@@ -124,11 +124,14 @@ class Decoder {
       return new Date(secs * 1000);
     }
     if (len === 8) {
-      const lo = this.view.getUint32(this.pos);
-      const hi = this.view.getUint32(this.pos + 4);
+      // Spec: data64 = (nanoseconds << 34) | seconds (30-bit nanoseconds, 34-bit seconds), big-endian.
+      // So the FIRST (more-significant) word holds nanoseconds in its top 30 bits plus the top 2 bits
+      // of seconds; the SECOND word holds the low 32 bits of seconds.
+      const high = this.view.getUint32(this.pos);
+      const low = this.view.getUint32(this.pos + 4);
       this.pos += 8;
-      const nanos = (hi >>> 2);
-      const secs = (hi & 0x3) * 2 ** 32 + lo;
+      const nanos = high >>> 2;
+      const secs = (high & 0x3) * 2 ** 32 + low;
       return new Date(secs * 1000 + Math.floor(nanos / 1e6));
     }
     if (len === 12) {

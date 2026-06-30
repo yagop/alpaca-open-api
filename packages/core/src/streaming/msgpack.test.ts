@@ -36,9 +36,21 @@ test('fixarray and fixmap', () => {
   expect(decode(u(0x81, 0xa1, 0x61, 0x01))).toEqual({ a: 1 }); // {"a":1}
 });
 
-test('timestamp extension (-1) decodes to a Date', () => {
+test('timestamp extension (-1) decodes to a Date - all three encodings', () => {
   // fixext4 (0xd6), type -1 (0xff), uint32 seconds = 1
   expect(decode(u(0xd6, 0xff, 0x00, 0x00, 0x00, 0x01))).toEqual(new Date(1000));
+
+  // fixext8 (0xd7), type -1, data64 = (nanoseconds << 34) | seconds for
+  // nanoseconds=500_000_000, seconds=1_700_000_000 -> 2023-11-14T22:13:20.500Z.
+  // Regression test: an earlier version of timestamp(8) read the big-endian
+  // word pair backwards, decoding this to a date roughly a decade off.
+  expect(decode(u(0xd7, 0xff, 0x77, 0x35, 0x94, 0x00, 0x65, 0x53, 0xf1, 0x00))).toEqual(new Date('2023-11-14T22:13:20.500Z'));
+
+  // ext8 (0xc7), length 12, type -1: 4-byte nanoseconds (250_000_000) + 8-byte seconds (1_700_000_000)
+  // -> 2023-11-14T22:13:20.250Z.
+  expect(decode(u(0xc7, 0x0c, 0xff, 0x0e, 0xe6, 0xb2, 0x80, 0x00, 0x00, 0x00, 0x00, 0x65, 0x53, 0xf1, 0x00))).toEqual(
+    new Date('2023-11-14T22:13:20.250Z'),
+  );
 });
 
 test('bin decodes to bytes; unknown ext keeps {type,data}', () => {
