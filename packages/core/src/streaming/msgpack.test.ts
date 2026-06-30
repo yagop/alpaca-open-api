@@ -136,3 +136,80 @@ test('round-trips a subscribe message with multiple channels', () => {
   const message = { action: 'subscribe', trades: ['AAPL', 'MSFT'], quotes: ['AAPL'] };
   expect(decode(encode(message))).toEqual(message);
 });
+
+test('encodes empty string/array/object', () => {
+  expect(decode(encode(''))).toBe('');
+  expect(decode(encode([]))).toEqual([]);
+  expect(decode(encode({}))).toEqual({});
+});
+
+// The cases below mirror https://github.com/msgpack/msgpack-node/blob/master/test/lib/msgpack.js -
+// same coverage (numeric edge cases, mixed/nested round-trips, circular references, toJSON), kept
+// scoped to what this codec actually supports (no Buffer-specific API, no multi-value unpacking -
+// every frame here is exactly one top-level value).
+
+test('round-trips negative numbers, including a non-integer', () => {
+  expect(decode(encode(-123))).toBe(-123);
+  expect(decode(encode(-1243.111))).toBe(-1243.111);
+});
+
+test('round-trips numbers around the 2^31 and 2^40 boundaries (both signs)', () => {
+  for (const n of [0 - 2 ** 31 - 1, 0 - 2 ** 40 - 1, 2 ** 31 + 1, 2 ** 40 + 1, 123456782345245]) {
+    expect(decode(encode(n))).toBe(n);
+  }
+});
+
+test('round-trips a mixed-type array, preserving each element\'s type', () => {
+  const value = [1, 'abc', false, null];
+  expect(decode(encode(value))).toEqual([1, 'abc', false, null]);
+});
+
+test('round-trips a nested object of mixed arrays/strings/maps', () => {
+  const value = { a: [1, 2, 3], b: 'cdef', c: { nuts: 'qqq' } };
+  expect(decode(encode(value))).toEqual(value);
+});
+
+test('a Date encodes via toJSON() (its ISO string), same as JSON.stringify - not a custom extension', () => {
+  const date = new Date('2024-01-01T00:00:00.500Z');
+  expect(decode(encode(date))).toBe(date.toJSON());
+  expect(decode(encode({ at: date }))).toEqual({ at: date.toJSON() });
+});
+
+test('an object with its own toJSON() is encoded via that result', () => {
+  const value = { toJSON: () => ({ flattened: true }) };
+  expect(decode(encode(value))).toEqual({ flattened: true });
+});
+
+test('toJSON() is respected on nested values and when inherited via the prototype', () => {
+  expect(decode(encode({ inner: { toJSON: () => 'x' } }))).toEqual({ inner: 'x' });
+
+  class WithProtoToJSON {
+    toJSON() {
+      return 'from-prototype';
+    }
+  }
+  expect(decode(encode(new WithProtoToJSON()))).toBe('from-prototype');
+});
+
+test('a circular array reference throws a clear error instead of recursing forever', () => {
+  const circular: unknown[] = [1, 2];
+  circular.push(circular);
+  expect(() => encode(circular)).toThrow('msgpack: cannot encode a circular reference');
+});
+
+test('a circular object reference throws a clear error instead of recursing forever', () => {
+  const circular: Record<string, unknown> = { a: 1 };
+  circular.self = circular;
+  expect(() => encode(circular)).toThrow('msgpack: cannot encode a circular reference');
+});
+
+test('the same object referenced twice in unrelated branches is not circular - encodes fine, independently each time', () => {
+  const shared = { x: 1 };
+  expect(decode(encode({ a: shared, b: shared }))).toEqual({ a: { x: 1 }, b: { x: 1 } });
+  expect(decode(encode([shared, shared]))).toEqual([{ x: 1 }, { x: 1 }]);
+});
+
+test('a value of an unsupported type throws rather than encoding silently wrong bytes', () => {
+  expect(() => encode(() => {})).toThrow(/msgpack: cannot encode/);
+  expect(() => encode(Symbol('x'))).toThrow(/msgpack: cannot encode/);
+});

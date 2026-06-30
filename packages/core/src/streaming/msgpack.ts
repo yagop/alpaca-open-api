@@ -7,9 +7,12 @@
  * to produce the simple flat `{action, ...}` shapes used for `auth`/`listen`/
  * `subscribe`/`unsubscribe` - nil, bool, string (any length), array, plain
  * object (map with string keys), and number (always as float64 - these
- * messages never carry one, but it keeps the encoder total). No extension
- * types, no compact integer-width selection - correctness over byte-shaving
- * for a handful of tiny, infrequent control messages.
+ * messages never carry one, but it keeps the encoder total). Values with a
+ * `toJSON()` (own or inherited, e.g. `Date`) encode via its result instead,
+ * same as `JSON.stringify`; a circular reference throws instead of recursing
+ * forever. No extension types, no compact integer-width selection -
+ * correctness over byte-shaving for a handful of tiny, infrequent control
+ * messages.
  *
  * Originally added decode-only on the assumption every stream accepts JSON
  * for outgoing messages (true for trading and stock/crypto/news data) -
@@ -27,10 +30,15 @@ export function decode(input: ArrayBuffer | ArrayBufferView): unknown {
   return new Decoder(toBytes(input)).read();
 }
 
-/** Encode one value (nil/bool/number/string/array/plain object) to a MessagePack buffer. */
+/**
+ * Encode one value (nil/bool/number/string/array/plain object) to a MessagePack
+ * buffer. A value with a `toJSON()` method (own or inherited - e.g. `Date`) is
+ * encoded via its `toJSON()` result instead, same as `JSON.stringify`. Throws on
+ * a circular reference rather than recursing forever.
+ */
 export function encode(value: unknown): Uint8Array {
   const out: number[] = [];
-  writeValue(value, out);
+  writeValue(value, out, new Set());
   return Uint8Array.from(out);
 }
 
@@ -40,8 +48,10 @@ function toBytes(input: ArrayBuffer | ArrayBufferView): Uint8Array {
   return new Uint8Array(input);
 }
 
-function writeValue(value: unknown, out: number[]): void {
-  if (value === null || value === undefined) {
+function writeValue(value: unknown, out: number[], seen: Set<object>): void {
+  if (value !== null && typeof value === 'object' && typeof (value as { toJSON?: unknown }).toJSON === 'function') {
+    writeValue((value as { toJSON(): unknown }).toJSON(), out, seen);
+  } else if (value === null || value === undefined) {
     out.push(0xc0);
   } else if (value === false) {
     out.push(0xc2);
@@ -52,17 +62,32 @@ function writeValue(value: unknown, out: number[]): void {
   } else if (typeof value === 'string') {
     writeString(value, out);
   } else if (Array.isArray(value)) {
-    writeLength(value.length, [0x90, 0xdc, 0xdd], out);
-    for (const item of value) writeValue(item, out);
+    withCycleCheck(value, seen, () => {
+      writeLength(value.length, [0x90, 0xdc, 0xdd], out);
+      for (const item of value) writeValue(item, out, seen);
+    });
   } else if (typeof value === 'object') {
-    const entries = Object.entries(value);
-    writeLength(entries.length, [0x80, 0xde, 0xdf], out);
-    for (const [k, v] of entries) {
-      writeString(k, out);
-      writeValue(v, out);
-    }
+    withCycleCheck(value, seen, () => {
+      const entries = Object.entries(value);
+      writeLength(entries.length, [0x80, 0xde, 0xdf], out);
+      for (const [k, v] of entries) {
+        writeString(k, out);
+        writeValue(v, out, seen);
+      }
+    });
   } else {
     throw new Error(`msgpack: cannot encode a ${typeof value}`);
+  }
+}
+
+/** Guards a container's recursion against a true cycle, while letting the same object appear more than once in unrelated branches (that's not circular). */
+function withCycleCheck(value: object, seen: Set<object>, write: () => void): void {
+  if (seen.has(value)) throw new Error('msgpack: cannot encode a circular reference');
+  seen.add(value);
+  try {
+    write();
+  } finally {
+    seen.delete(value);
   }
 }
 
