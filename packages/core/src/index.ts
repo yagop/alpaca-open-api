@@ -42,11 +42,16 @@ export type { TradeUpdate, TradeUpdateEvent, TradingStreamEvent, TradingStreamOp
 export { cryptoDataStream, MarketDataStreamClient, newsDataStream, optionDataStream, stockDataStream } from './streaming/market-data-client';
 export type {
   CryptoMessage,
+  CryptoOrderbookMessage,
   MarketDataStreamEvent,
   MarketDataStreamOptions,
   NewsMessage,
   OptionMessage,
+  StockCancelErrorMessage,
+  StockCorrectionMessage,
+  StockLuldMessage,
   StockMessage,
+  StockStatusMessage,
   SubscriptionAck,
 } from './streaming/market-data-client';
 export type { OptionFeed, StockFeed } from './streaming/routes';

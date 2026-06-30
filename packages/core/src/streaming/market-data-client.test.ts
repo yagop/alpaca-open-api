@@ -1,5 +1,18 @@
 import { expect, test } from 'bun:test';
-import { cryptoDataStream, type MarketDataStreamEvent, newsDataStream, optionDataStream, type StockMessage, stockDataStream } from './market-data-client';
+import {
+  cryptoDataStream,
+  type CryptoMessage,
+  type CryptoOrderbookMessage,
+  type MarketDataStreamEvent,
+  newsDataStream,
+  optionDataStream,
+  type StockCancelErrorMessage,
+  type StockCorrectionMessage,
+  type StockLuldMessage,
+  type StockMessage,
+  type StockStatusMessage,
+  stockDataStream,
+} from './market-data-client';
 import { lastSocket, MockSocket } from './mock-socket';
 import { decode, encode } from './msgpack';
 
@@ -105,6 +118,57 @@ test('typed trade/quote/bar messages are yielded and iterable; subscription acks
   socket.message(JSON.stringify([{ T: 'q', S: 'AAPL', bp: 150, bs: 1, ax: 'V', ap: 150.5, as: 1, bx: 'V', c: [], t: '2024-01-01T00:00:00Z', z: 'A' }]));
   const [quote] = await collect(client, 1);
   expect((quote as Extract<MarketDataStreamEvent<StockMessage>, { type: 'message' }>).message).toMatchObject({ T: 'q', S: 'AAPL' });
+});
+
+// Golden payloads straight from https://docs.alpaca.markets/docs/real-time-stock-pricing-data
+// and https://docs.alpaca.markets/docs/real-time-crypto-pricing-data - status/LULD/correction/
+// cancel-error (stock-only) and orderbook (crypto-only) have no REST equivalent to compare
+// against, so these anchor the hand-written types directly to the documented wire shape.
+
+test('typed stock status, LULD, correction, and cancel/error events flow through as plain messages', async () => {
+  MockSocket.instances = [];
+  const client = stockDataStream({ WebSocketImpl: MockSocket as unknown as typeof WebSocket });
+  const socket = connectAndAuth(() => client.connect());
+  await collect(client, 2); // open + authenticated
+
+  const status: StockStatusMessage = { T: 's', S: 'AAPL', sc: 'H', sm: 'Trading Halt', rc: 'T12', rm: 'Trading Halted; For information requested by NASDAQ', t: '2021-02-22T19:15:00Z', z: 'C' };
+  const luld: StockLuldMessage = { T: 'l', S: 'IONM', u: 3.24, d: 2.65, i: 'B', t: '2023-04-06T13:34:45.565004401Z', z: 'C' };
+  const correction: StockCorrectionMessage = {
+    T: 'c',
+    S: 'EEM',
+    x: 'M',
+    oi: 52983525033527,
+    op: 39.1582,
+    os: 440000,
+    oc: [' ', '7'],
+    ci: 52983525034326,
+    cp: 39.1809,
+    cs: 440000,
+    cc: [' ', '7'],
+    z: 'B',
+    t: '2023-04-06T14:25:06.542305024Z',
+  };
+  const cancelError: StockCancelErrorMessage = { T: 'x', S: 'GOOGL', i: 465, x: 'D', p: 105.31, s: 300, a: 'C', z: 'C', t: '2023-04-06T13:15:42.83540958Z' };
+  socket.message(JSON.stringify([status]));
+  socket.message(JSON.stringify([luld]));
+  socket.message(JSON.stringify([correction]));
+  socket.message(JSON.stringify([cancelError]));
+
+  const events = await collect(client, 4);
+  expect(events.map((e) => (e as Extract<MarketDataStreamEvent<StockMessage>, { type: 'message' }>).message)).toEqual([status, luld, correction, cancelError]);
+});
+
+test('typed crypto orderbook events flow through as plain messages', async () => {
+  MockSocket.instances = [];
+  const client = cryptoDataStream({ WebSocketImpl: MockSocket as unknown as typeof WebSocket });
+  const socket = connectAndAuth(() => client.connect());
+  await collect(client, 2);
+
+  const orderbook: CryptoOrderbookMessage = { T: 'o', S: 'BTC/USD', t: '2024-03-12T10:38:50.79613221Z', b: [{ p: 71859.53, s: 0.27994 }], a: [{ p: 71939.7, s: 0.83953 }], r: true };
+  socket.message(JSON.stringify([orderbook]));
+
+  const [event] = await collect(client, 1);
+  expect((event as Extract<MarketDataStreamEvent<CryptoMessage>, { type: 'message' }>).message).toEqual(orderbook);
 });
 
 test('authenticates over the option feed using real MessagePack both ways (unlike stocks/crypto/news, which are JSON)', async () => {

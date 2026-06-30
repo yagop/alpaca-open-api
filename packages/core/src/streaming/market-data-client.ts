@@ -23,15 +23,93 @@
  * @see https://docs.alpaca.markets/docs/streaming-market-data
  */
 
-import type { CryptoBar, CryptoQuote, CryptoTrade, News, OptionQuote, OptionTrade, StockBar, StockQuote, StockTrade } from '../generated/data/model';
+import type { CryptoBar, CryptoOrderbook, CryptoQuote, CryptoTrade, News, OptionQuote, OptionTrade, StockBar, StockQuote, StockTrade } from '../generated/data/model';
 import { StreamClient, type ReconnectOptions } from './client';
 import { decode as msgpackDecode, encode as msgpackEncode } from './msgpack';
 import { cryptoStreamUrl, newsStreamUrl, optionStreamUrl, stockStreamUrl, type OptionFeed, type StockFeed } from './routes';
 
-/** A stock trade/quote/bar event - REST model shape plus the streaming envelope (`T`, `S`). */
-export type StockMessage = (StockTrade & { T: 't'; S: string }) | (StockQuote & { T: 'q'; S: string }) | (StockBar & { T: 'b' | 'd' | 'u'; S: string });
-/** A crypto trade/quote/bar event. */
-export type CryptoMessage = (CryptoTrade & { T: 't'; S: string }) | (CryptoQuote & { T: 'q'; S: string }) | (CryptoBar & { T: 'b' | 'd' | 'u'; S: string });
+// Trading status, LULD, correction and cancel/error events are stock-only (confirmed against
+// Alpaca's docs and this client's own subscription acks - crypto's ack never offers these
+// channels) and streaming-only - there's no REST historical endpoint for them, so unlike
+// trade/quote/bar there's no generated model to reuse; these are hand-written from the docs'
+// field tables. @see https://docs.alpaca.markets/docs/real-time-stock-pricing-data
+
+/** Trading halt/resume event. */
+export interface StockStatusMessage {
+  T: 's';
+  S: string;
+  /** Status code, e.g. `H` (halt) / `T` (trading resumed). */
+  sc: string;
+  sm: string;
+  rc: string;
+  rm: string;
+  t: string;
+  z?: string;
+}
+
+/** Limit-up/limit-down event. */
+export interface StockLuldMessage {
+  T: 'l';
+  S: string;
+  /** Limit-up price. */
+  u: number;
+  /** Limit-down price. */
+  d: number;
+  /** Indicator code. */
+  i: string;
+  t: string;
+  z?: string;
+}
+
+/** A previously-reported trade gets its price/size corrected. */
+export interface StockCorrectionMessage {
+  T: 'c';
+  S: string;
+  x: string;
+  oi: number;
+  op: number;
+  os: number;
+  oc?: string[];
+  ci: number;
+  cp: number;
+  cs: number;
+  cc?: string[];
+  t: string;
+  z?: string;
+}
+
+/** A previously-reported trade is canceled or flagged as erroneous. */
+export interface StockCancelErrorMessage {
+  T: 'x';
+  S: string;
+  i: number;
+  x: string;
+  p: number;
+  s: number;
+  /** `C` (canceled) or `E` (erroneous). */
+  a: string;
+  t: string;
+  z?: string;
+}
+
+/** A crypto orderbook snapshot/update - REST `CryptoOrderbook` shape plus the streaming envelope. */
+export type CryptoOrderbookMessage = CryptoOrderbook & { T: 'o'; S: string; r: boolean };
+
+/** A stock trade/quote/bar/status/LULD/correction/cancel-error event - REST model shape (where one exists) plus the streaming envelope (`T`, `S`). */
+export type StockMessage =
+  | (StockTrade & { T: 't'; S: string })
+  | (StockQuote & { T: 'q'; S: string })
+  | (StockBar & { T: 'b' | 'd' | 'u'; S: string })
+  | StockStatusMessage
+  | StockLuldMessage
+  | StockCorrectionMessage
+  | StockCancelErrorMessage;
+/** A crypto trade/quote/bar/orderbook event. */
+export type CryptoMessage =
+  | (CryptoTrade & { T: 't'; S: string })
+  | (CryptoQuote & { T: 'q'; S: string })
+  | (CryptoBar & { T: 'b' | 'd' | 'u'; S: string })
+  | CryptoOrderbookMessage;
 /** An option trade/quote event. */
 export type OptionMessage = (OptionTrade & { T: 't'; S: string }) | (OptionQuote & { T: 'q'; S: string });
 /** A news article event. */

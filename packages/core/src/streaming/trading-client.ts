@@ -20,7 +20,11 @@ import type { Order } from '../generated/trading/model';
 import { StreamClient, type ReconnectOptions } from './client';
 import { tradingStreamUrl } from './routes';
 
-/** All `data.event` values Alpaca's trade_updates stream can send. */
+/**
+ * All known `data.event` values Alpaca's trade_updates stream can send. `| (string & {})` keeps
+ * autocomplete for these while still accepting any string - so a new event kind Alpaca adds
+ * later flows through typed instead of being rejected by `TradeUpdate.event`'s type.
+ */
 export type TradeUpdateEvent =
   | 'new'
   | 'fill'
@@ -38,7 +42,8 @@ export type TradeUpdateEvent =
   | 'calculated'
   | 'suspended'
   | 'order_replace_rejected'
-  | 'order_cancel_rejected';
+  | 'order_cancel_rejected'
+  | (string & {});
 
 /** One `trade_updates` event - `price`/`qty`/`position_qty`/`execution_id` are only present for fill events. */
 export interface TradeUpdate {
