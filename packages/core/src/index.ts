@@ -50,7 +50,8 @@ export type {
   SubscriptionAck,
 } from './streaming/market-data-client';
 export type { OptionFeed, StockFeed } from './streaming/routes';
-// Unused by default (the trading stream's real default codec is JSON, not msgpack - see
-// trading-client.ts's module doc) - exported so `TradingStreamOptions.decode` can be set to
-// it if your transport does negotiate the `Content-Type: application/msgpack` codec.
-export { decode as decodeMsgPack } from './streaming/msgpack';
+// `optionDataStream()` already wires these up by default (the option feed requires real
+// MessagePack both ways - see market-data-client.ts's module doc). Exported so
+// `TradingStreamOptions`/`MarketDataStreamOptions`' `encode`/`decode` can opt into the same
+// codec elsewhere, e.g. if a transport negotiates `Content-Type: application/msgpack`.
+export { decode as decodeMsgPack, encode as encodeMsgPack } from './streaming/msgpack';

@@ -45,10 +45,10 @@ export interface StreamClientOptions {
   auth(): unknown;
   /** True once a decoded message indicates the auth handshake succeeded. */
   isAuthenticated(message: unknown): boolean;
-  /** Decodes one inbound frame. Defaults to `JSON.parse` of text frames (throws on binary). */
+  /** Decodes one inbound frame. Defaults to UTF-8 text + `JSON.parse`, for both text and binary-opcode frames. */
   decode?(data: string | ArrayBuffer): unknown;
   /** Encodes one outgoing message before sending. Defaults to `JSON.stringify`. */
-  encode?(message: unknown): string;
+  encode?(message: unknown): string | Uint8Array;
   /** Backoff for automatic reconnects. `false` disables reconnecting. Default enabled. */
   reconnect?: ReconnectOptions | false;
   /** Force a reconnect if no message (incl. the auth ack) arrives within this many ms. 0/undefined disables. */
@@ -276,7 +276,16 @@ export class StreamClient implements AsyncIterable<StreamEvent> {
 
   private decode(data: string | ArrayBuffer): unknown {
     if (this.options.decode) return this.options.decode(data);
-    if (typeof data !== 'string') throw new Error('stream: binary frame received but no decode() was configured');
-    return JSON.parse(data);
+    // Default: UTF-8 text + JSON.parse, regardless of whether the frame arrived as a text or
+    // binary-opcode WS frame. Confirmed against the real API: several Alpaca streams (trading,
+    // option data) send JSON as *binary*-opcode frames - "binary frames" in their docs describes
+    // the WS opcode, not the codec - while others (stock/crypto/news data) use text frames. A
+    // frame that's neither valid UTF-8-as-JSON nor handled by a custom `decode` (e.g. real
+    // MessagePack, which needs a `Content-Type` header this client has no way to set) surfaces as
+    // an `error` event via the catch in `handleMessage`, same as any other decode failure.
+    const text = typeof data === 'string' ? data : DECODER.decode(data);
+    return JSON.parse(text);
   }
 }
+
+const DECODER = new TextDecoder();

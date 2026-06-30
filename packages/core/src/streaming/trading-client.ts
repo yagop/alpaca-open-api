@@ -5,12 +5,13 @@
  * one channel, your whole account, so it's listened once at construction
  * time and replayed automatically by the base client on every reconnect).
  *
- * Frames arrive as JSON text inside *binary-opcode* WebSocket frames by
- * default - confirmed against the real paper API. Alpaca's docs describe an
- * opt-in MessagePack codec (`Content-Type: application/msgpack`), but that
- * needs a custom request header the standard `WebSocket` API has no way to
- * set, so it's unreachable via this client unless you supply a `decode`
- * override backed by a transport that can set it (see `./msgpack`).
+ * Frames arrive as JSON inside *binary-opcode* WebSocket frames by default -
+ * confirmed against the real paper API (`StreamClient`'s default `decode`
+ * handles this transparently; see its doc). Alpaca's docs describe an opt-in
+ * MessagePack codec (`Content-Type: application/msgpack`), but that needs a
+ * custom request header the standard `WebSocket` API has no way to set, so
+ * it's unreachable via this client unless you supply a `decode` override
+ * backed by a transport that can set it (see `./msgpack`).
  *
  * @see https://docs.alpaca.markets/docs/websocket-streaming
  */
@@ -63,7 +64,7 @@ export interface TradingStreamOptions {
   apiKey?: string;
   /** Defaults to `ALPACA_API_SECRET`. */
   apiSecret?: string;
-  /** Decodes one inbound frame. Defaults to UTF-8 text + `JSON.parse` (the real default codec - see module doc). */
+  /** Decodes one inbound frame. Defaults to `StreamClient`'s UTF-8 text + `JSON.parse` (the real default codec - see module doc). */
   decode?(data: string | ArrayBuffer): unknown;
   reconnect?: ReconnectOptions | false;
   idleTimeoutMs?: number;
@@ -72,7 +73,6 @@ export interface TradingStreamOptions {
 }
 
 const LISTEN_KEY = 'trade_updates';
-const TEXT = new TextDecoder();
 
 interface AuthorizationMessage {
   stream: 'authorization';
@@ -92,11 +92,6 @@ function isTradeUpdateMessage(message: unknown): message is TradeUpdateMessage {
   return !!message && typeof message === 'object' && (message as { stream?: unknown }).stream === 'trade_updates';
 }
 
-function decodeJsonFrame(data: string | ArrayBuffer): unknown {
-  const text = typeof data === 'string' ? data : TEXT.decode(data);
-  return JSON.parse(text);
-}
-
 /**
  * Connects to the trading stream and is an `AsyncIterable<TradingStreamEvent>`.
  * Everything else (reconnect/backoff, idle detection, re-listening after a
@@ -111,7 +106,7 @@ export class TradingStreamClient implements AsyncIterable<TradingStreamEvent> {
     this.client = new StreamClient({
       url: tradingStreamUrl,
       auth: () => ({ action: 'auth', key, secret }),
-      decode: options.decode ?? decodeJsonFrame,
+      decode: options.decode,
       isAuthenticated: (message) => isAuthorizationMessage(message) && message.data.status === 'authorized',
       reconnect: options.reconnect,
       idleTimeoutMs: options.idleTimeoutMs,

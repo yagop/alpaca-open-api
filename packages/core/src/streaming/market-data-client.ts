@@ -1,10 +1,18 @@
 /**
  * Market-data streams - real-time stock, crypto, option and news data over
- * Alpaca's `stream.data.alpaca.markets` WebSocket. One JSON protocol shared
- * by all four feeds (auth, then incremental `subscribe`/`unsubscribe` by
- * channel + symbols, e.g. `{action:"subscribe",trades:["AAPL"]}`) - so a
- * single generic client (`MarketDataStreamClient`) implements it once, and
- * four tiny factories below wire it to the right host/feed and message type.
+ * Alpaca's `stream.data.alpaca.markets` WebSocket. Mostly one JSON protocol
+ * shared across the four feeds (auth, then incremental `subscribe`/
+ * `unsubscribe` by channel + symbols, e.g. `{action:"subscribe",trades:
+ * ["AAPL"]}`) - so a single generic client (`MarketDataStreamClient`)
+ * implements it once, and four tiny factories below wire it to the right
+ * host/feed and message type.
+ *
+ * The exception, confirmed against the real API: the **option** data stream
+ * rejects a JSON-text auth message outright (`{T:"error", code:400, msg:
+ * "invalid syntax"}`) and requires real MessagePack both ways, not just
+ * JSON-as-binary-frame like the trading stream. `optionDataStream()` wires
+ * up `./msgpack`'s codec by default; `encode`/`decode` stay overridable for
+ * the same reason `TradingStreamOptions` exposes them.
  *
  * Subscriptions are tracked as one merged `{channel: symbols[]}` message
  * under a single replay key on the base `StreamClient` - it resends the
@@ -17,6 +25,7 @@
 
 import type { CryptoBar, CryptoQuote, CryptoTrade, News, OptionQuote, OptionTrade, StockBar, StockQuote, StockTrade } from '../generated/data/model';
 import { StreamClient, type ReconnectOptions } from './client';
+import { decode as msgpackDecode, encode as msgpackEncode } from './msgpack';
 import { cryptoStreamUrl, newsStreamUrl, optionStreamUrl, stockStreamUrl, type OptionFeed, type StockFeed } from './routes';
 
 /** A stock trade/quote/bar event - REST model shape plus the streaming envelope (`T`, `S`). */
@@ -48,6 +57,10 @@ export interface MarketDataStreamOptions {
   apiKey?: string;
   /** Defaults to `ALPACA_API_SECRET`. */
   apiSecret?: string;
+  /** Decodes one inbound frame. Defaults to `StreamClient`'s UTF-8 text + `JSON.parse`. */
+  decode?(data: string | ArrayBuffer): unknown;
+  /** Encodes one outgoing message. Defaults to `JSON.stringify`. */
+  encode?(message: unknown): string | Uint8Array;
   reconnect?: ReconnectOptions | false;
   idleTimeoutMs?: number;
   /** `WebSocket` constructor to use - override in tests. */
@@ -88,6 +101,8 @@ export class MarketDataStreamClient<TMessage extends { T: string }> implements A
     this.client = new StreamClient({
       url: options.url,
       auth: () => ({ action: 'auth', key, secret }),
+      decode: options.decode,
+      encode: options.encode,
       isAuthenticated: (message) => isControlMessage(message, 'authenticated'),
       reconnect: options.reconnect,
       idleTimeoutMs: options.idleTimeoutMs,
@@ -185,10 +200,21 @@ export function cryptoDataStream(options: MarketDataStreamOptions = {}): MarketD
   return new MarketDataStreamClient<CryptoMessage>({ ...options, url: cryptoStreamUrl });
 }
 
+/** The option stream's frames are real MessagePack both ways - see the module doc. */
+function decodeOptionFrame(data: string | ArrayBuffer): unknown {
+  if (typeof data === 'string') throw new Error('option data stream: unexpected text frame (expected binary msgpack)');
+  return msgpackDecode(data);
+}
+
 /** Option trades/quotes. `feed` defaults to `indicative`. */
 export function optionDataStream(options: MarketDataStreamOptions & { feed?: OptionFeed } = {}): MarketDataStreamClient<OptionMessage> {
-  const { feed, ...rest } = options;
-  return new MarketDataStreamClient<OptionMessage>({ ...rest, url: () => optionStreamUrl(feed) });
+  const { feed, decode, encode, ...rest } = options;
+  return new MarketDataStreamClient<OptionMessage>({
+    ...rest,
+    decode: decode ?? decodeOptionFrame,
+    encode: encode ?? msgpackEncode,
+    url: () => optionStreamUrl(feed),
+  });
 }
 
 /** News articles. Subscribe with `{news: ['*']}` for everything or specific symbols. */

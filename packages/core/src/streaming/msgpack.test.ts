@@ -1,5 +1,5 @@
 import { expect, test } from 'bun:test';
-import { decode } from './msgpack';
+import { decode, encode } from './msgpack';
 
 // Golden byte vectors straight from the MessagePack spec - each anchors one leaf
 // type independently (so a systematically-wrong reader can't pass via round-trip).
@@ -90,4 +90,49 @@ test('nested trade_updates frame', () => {
     stream: 'trade_updates',
     data: { event: 'fill', price: '100.5', order: { id: 'abc', status: 'filled' } },
   });
+});
+
+// The encoder only needs to produce simple `{action, ...}` control messages (auth/listen/
+// subscribe/unsubscribe) for the option data stream, which - confirmed against the real API -
+// rejects a JSON-text auth message outright and requires real MessagePack both ways.
+
+test('encodes nil, bool, and float64 numbers', () => {
+  expect(decode(encode(null))).toBeNull();
+  expect(decode(encode(undefined))).toBeNull();
+  expect(decode(encode(true))).toBe(true);
+  expect(decode(encode(false))).toBe(false);
+  expect(decode(encode(1.5))).toBe(1.5);
+  expect(decode(encode(0))).toBe(0);
+});
+
+test('encodes strings of every length class (fixstr / str8 / str16)', () => {
+  expect(decode(encode('hi'))).toBe('hi'); // fixstr
+  const len31 = 'a'.repeat(31);
+  expect(decode(encode(len31))).toBe(len31); // fixstr boundary
+  // Regression: an API secret (44 chars) exceeds fixstr's 31-byte limit and needs str8 - an
+  // encoder that always emits a fixstr opcode here corrupts the length nibble silently instead
+  // of throwing, truncating the decoded string and desyncing every byte after it.
+  const len44 = 'b'.repeat(44);
+  expect(decode(encode(len44))).toBe(len44);
+  const len300 = 'c'.repeat(300); // str16
+  expect(decode(encode(len300))).toBe(len300);
+});
+
+test('encodes arrays and plain objects (maps), including nested', () => {
+  expect(decode(encode([1, 2, 3]))).toEqual([1, 2, 3]);
+  expect(decode(encode({ a: 1, b: 'two' }))).toEqual({ a: 1, b: 'two' });
+  expect(decode(encode({ action: 'listen', data: { streams: ['trade_updates'] } }))).toEqual({
+    action: 'listen',
+    data: { streams: ['trade_updates'] },
+  });
+});
+
+test('round-trips a realistic auth message with full-length key/secret', () => {
+  const message = { action: 'auth', key: 'PKTEST1234567890ABCD', secret: 'x'.repeat(40) };
+  expect(decode(encode(message))).toEqual(message);
+});
+
+test('round-trips a subscribe message with multiple channels', () => {
+  const message = { action: 'subscribe', trades: ['AAPL', 'MSFT'], quotes: ['AAPL'] };
+  expect(decode(encode(message))).toEqual(message);
 });

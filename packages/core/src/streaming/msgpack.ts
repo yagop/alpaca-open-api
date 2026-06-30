@@ -1,10 +1,21 @@
 /**
- * Minimal MessagePack *decoder* - just enough to read Alpaca's binary
- * `trade_updates` frames (maps, arrays, strings, ints, floats, bool, nil, bin and
- * the timestamp extension). Decode-only and dependency-free by design: the REST
- * seam stays JSON and only this one stream is binary, so a small reader beats a
- * dependency (project policy: native/minimal over a new dep). Encoding outgoing
- * frames is unnecessary - Alpaca accepts JSON for `auth`/`listen`.
+ * Minimal MessagePack codec - just enough to talk to Alpaca's binary streams.
+ * Dependency-free by design (project policy: native/minimal over a new dep).
+ *
+ * The decoder reads everything Alpaca sends (maps, arrays, strings, ints,
+ * floats, bool, nil, bin and the timestamp extension). The encoder only needs
+ * to produce the simple flat `{action, ...}` shapes used for `auth`/`listen`/
+ * `subscribe`/`unsubscribe` - nil, bool, string (any length), array, plain
+ * object (map with string keys), and number (always as float64 - these
+ * messages never carry one, but it keeps the encoder total). No extension
+ * types, no compact integer-width selection - correctness over byte-shaving
+ * for a handful of tiny, infrequent control messages.
+ *
+ * Originally added decode-only on the assumption every stream accepts JSON
+ * for outgoing messages (true for trading and stock/crypto/news data) -
+ * disproven for the option data stream, confirmed against the real API: it
+ * rejects a JSON-text auth message with `{T:"error", code:400, msg:"invalid
+ * syntax"}` and requires real MessagePack both ways.
  *
  * @see https://github.com/msgpack/msgpack/blob/master/spec.md
  */
@@ -16,10 +27,87 @@ export function decode(input: ArrayBuffer | ArrayBufferView): unknown {
   return new Decoder(toBytes(input)).read();
 }
 
+/** Encode one value (nil/bool/number/string/array/plain object) to a MessagePack buffer. */
+export function encode(value: unknown): Uint8Array {
+  const out: number[] = [];
+  writeValue(value, out);
+  return Uint8Array.from(out);
+}
+
 function toBytes(input: ArrayBuffer | ArrayBufferView): Uint8Array {
   if (input instanceof Uint8Array) return input;
   if (ArrayBuffer.isView(input)) return new Uint8Array(input.buffer, input.byteOffset, input.byteLength);
   return new Uint8Array(input);
+}
+
+function writeValue(value: unknown, out: number[]): void {
+  if (value === null || value === undefined) {
+    out.push(0xc0);
+  } else if (value === false) {
+    out.push(0xc2);
+  } else if (value === true) {
+    out.push(0xc3);
+  } else if (typeof value === 'number') {
+    out.push(0xcb, ...f64(value));
+  } else if (typeof value === 'string') {
+    writeString(value, out);
+  } else if (Array.isArray(value)) {
+    writeLength(value.length, [0x90, 0xdc, 0xdd], out);
+    for (const item of value) writeValue(item, out);
+  } else if (typeof value === 'object') {
+    const entries = Object.entries(value);
+    writeLength(entries.length, [0x80, 0xde, 0xdf], out);
+    for (const [k, v] of entries) {
+      writeString(k, out);
+      writeValue(v, out);
+    }
+  } else {
+    throw new Error(`msgpack: cannot encode a ${typeof value}`);
+  }
+}
+
+function writeString(value: string, out: number[]): void {
+  const bytes = TEXT_ENCODER.encode(value);
+  if (bytes.length < 32) out.push(0xa0 | bytes.length);
+  else writeLength(bytes.length, [-1, 0xd9, 0xda, 0xdb], out, true);
+  out.push(...bytes);
+}
+
+/**
+ * Writes the opcode + any length bytes for a length-prefixed type. `opcodes` is
+ * `[fixedOpcode, len8Or16Opcode, len32Opcode]` (fixed has no length byte; the
+ * others are uint8/16 then uint32) for arrays/maps, or `[-1, len8, len16, len32]`
+ * for strings (no fixed-with-no-length-byte form beyond the literal fixstr case,
+ * handled separately in `writeString`).
+ */
+function writeLength(len: number, opcodes: readonly number[], out: number[], stringForm = false): void {
+  if (!stringForm) {
+    const [fixed, op16, op32] = opcodes as [number, number, number];
+    if (len < 16) {
+      out.push(fixed | len);
+    } else if (len < 0x10000) {
+      out.push(op16, (len >> 8) & 0xff, len & 0xff);
+    } else {
+      out.push(op32, (len >>> 24) & 0xff, (len >>> 16) & 0xff, (len >>> 8) & 0xff, len & 0xff);
+    }
+    return;
+  }
+  const [, op8, op16, op32] = opcodes as [number, number, number, number];
+  if (len < 256) {
+    out.push(op8, len);
+  } else if (len < 0x10000) {
+    out.push(op16, (len >> 8) & 0xff, len & 0xff);
+  } else {
+    out.push(op32, (len >>> 24) & 0xff, (len >>> 16) & 0xff, (len >>> 8) & 0xff, len & 0xff);
+  }
+}
+
+const TEXT_ENCODER = new TextEncoder();
+
+function f64(value: number): number[] {
+  const buf = new ArrayBuffer(8);
+  new DataView(buf).setFloat64(0, value);
+  return [...new Uint8Array(buf)];
 }
 
 class Decoder {

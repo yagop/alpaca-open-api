@@ -1,6 +1,7 @@
 import { expect, test } from 'bun:test';
 import { cryptoDataStream, type MarketDataStreamEvent, newsDataStream, optionDataStream, type StockMessage, stockDataStream } from './market-data-client';
 import { lastSocket, MockSocket } from './mock-socket';
+import { decode, encode } from './msgpack';
 
 const json = (sent: unknown) => JSON.parse(sent as string);
 
@@ -104,6 +105,31 @@ test('typed trade/quote/bar messages are yielded and iterable; subscription acks
   socket.message(JSON.stringify([{ T: 'q', S: 'AAPL', bp: 150, bs: 1, ax: 'V', ap: 150.5, as: 1, bx: 'V', c: [], t: '2024-01-01T00:00:00Z', z: 'A' }]));
   const [quote] = await collect(client, 1);
   expect((quote as Extract<MarketDataStreamEvent<StockMessage>, { type: 'message' }>).message).toMatchObject({ T: 'q', S: 'AAPL' });
+});
+
+test('authenticates over the option feed using real MessagePack both ways (unlike stocks/crypto/news, which are JSON)', async () => {
+  // Regression: confirmed against the real API that the option data stream rejects a JSON-text
+  // auth message outright (`{T:"error",code:400,msg:"invalid syntax"}`) and requires real
+  // MessagePack in both directions - the only stream that does (the trading stream sends JSON
+  // as binary-opcode frames, which is different and already handled by the base client's
+  // default decode). `optionDataStream()` must wire up the msgpack codec itself.
+  MockSocket.instances = [];
+  const client = optionDataStream({ apiKey: 'KEY', apiSecret: 'SECRET', WebSocketImpl: MockSocket as unknown as typeof WebSocket });
+  client.connect();
+  const socket = lastSocket();
+  socket.open();
+
+  expect(decode(socket.sent[0] as Uint8Array)).toEqual({ action: 'auth', key: 'KEY', secret: 'SECRET' });
+
+  const msgpackFrame = (value: unknown) => encode(value).buffer;
+  socket.message(msgpackFrame([{ T: 'success', msg: 'connected' }]));
+  socket.message(msgpackFrame([{ T: 'success', msg: 'authenticated' }]));
+
+  const events = await collect(client, 2);
+  expect(events).toEqual([{ type: 'open' }, { type: 'authenticated' }]);
+
+  client.subscribe({ trades: ['AAPL260116C00150000'] });
+  expect(decode(socket.sent.at(-1) as Uint8Array)).toEqual({ action: 'subscribe', trades: ['AAPL260116C00150000'] });
 });
 
 test('crypto/option/news factories target the right hosts', () => {

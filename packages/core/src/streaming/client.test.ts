@@ -170,17 +170,35 @@ test('send() throws when the socket is not open', () => {
   expect(() => client.send({ action: 'noop' })).toThrow('stream socket is not open');
 });
 
-test('a binary frame with no decode() configured yields an error event instead of throwing', async () => {
+test('the default decode handles JSON arriving as a binary-opcode frame, not just text frames', async () => {
+  // Regression: confirmed against the real API that some streams (trading, option data) send
+  // JSON inside *binary*-opcode frames by default - "binary frames" describes the WS opcode,
+  // not the codec. The default decode (no `decode` option configured) must handle this, not
+  // just text frames.
   MockSocket.instances = [];
   const client = new StreamClient(dataStreamOptions());
   client.connect();
   const socket = lastSocket();
   socket.open();
-  socket.message(new ArrayBuffer(4));
+  const bytes = new TextEncoder().encode(JSON.stringify({ T: 'success', msg: 'authenticated' }));
+  socket.message(bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength));
+
+  const [openEvent, authEvent] = await collect(client, 2);
+  expect(openEvent).toEqual({ type: 'open' });
+  expect(authEvent).toEqual({ type: 'authenticated' });
+});
+
+test('a binary frame that is not valid UTF-8 JSON yields an error event instead of throwing', async () => {
+  MockSocket.instances = [];
+  const client = new StreamClient(dataStreamOptions());
+  client.connect();
+  const socket = lastSocket();
+  socket.open();
+  socket.message(new ArrayBuffer(4)); // four zero bytes - not valid JSON
 
   const [openEvent, errorEvent] = await collect(client, 2);
   expect(openEvent).toEqual({ type: 'open' });
-  expect((errorEvent as { type: 'error'; error: Error }).error.message).toMatch(/binary frame received but no decode/);
+  expect((errorEvent as { type: 'error'; error: Error }).error).toBeInstanceOf(Error);
 });
 
 test('AsyncQueue rejects a second concurrent consumer instead of silently splitting messages between them', async () => {
