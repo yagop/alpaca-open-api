@@ -60,6 +60,28 @@ export interface StreamClientOptions {
 const DEFAULT_RECONNECT: Required<ReconnectOptions> = { initialDelayMs: 500, maxDelayMs: 30_000, factor: 2 };
 /** Per the WebSocket spec, `readyState` values are fixed - no need for the constructor's statics. */
 const WS_OPEN = 1;
+const TEXT_DECODER = new TextDecoder();
+
+/**
+ * Default frame decode: UTF-8 text + `JSON.parse`, regardless of whether the frame arrived as a
+ * text or binary-opcode WS frame. Confirmed against the real API: several Alpaca streams (trading,
+ * option data) send JSON as *binary*-opcode frames - "binary frames" in their docs describes the
+ * WS opcode, not the codec - while others (stock/crypto/news data) use text frames. A frame that's
+ * neither valid UTF-8-as-JSON nor handled by a custom `decode` (e.g. real MessagePack, which needs
+ * a `Content-Type` header this client has no way to set) throws here and surfaces as an `error`
+ * event via the catch in `handleMessage`, same as any other decode failure.
+ */
+function decodeJson(data: string | ArrayBuffer): unknown {
+  return JSON.parse(typeof data === 'string' ? data : TEXT_DECODER.decode(data));
+}
+
+function encodeJson(message: unknown): string {
+  return JSON.stringify(message);
+}
+
+function asError(err: unknown): Error {
+  return err instanceof Error ? err : new Error(String(err));
+}
 
 /**
  * A minimal async pull queue - decouples push-style event emission from
@@ -126,9 +148,14 @@ export class StreamClient implements AsyncIterable<StreamEvent> {
     return this._state;
   }
 
+  /** True while a socket is live or mid-handshake - `connect()` is a no-op in these states. */
+  private get socketInFlight(): boolean {
+    return this._state === 'connecting' || this._state === 'authenticating' || this._state === 'open' || this._state === 'closing';
+  }
+
   /** Opens the connection. A no-op while already connecting/authenticating/open/closing; cancels a pending reconnect otherwise. */
   connect(): void {
-    if (this._state === 'connecting' || this._state === 'authenticating' || this._state === 'open' || this._state === 'closing') return;
+    if (this.socketInFlight) return;
     this.clearReconnectTimer();
     this.intentionalClose = false;
     this._state = 'connecting';
@@ -138,15 +165,14 @@ export class StreamClient implements AsyncIterable<StreamEvent> {
     this.socket = socket;
     socket.addEventListener('open', () => this.handleOpen());
     socket.addEventListener('message', (event: MessageEvent) => this.handleMessage(event.data));
-    socket.addEventListener('error', () => this.events.push({ type: 'error', error: new Error('stream socket error') }));
+    socket.addEventListener('error', () => this.emitError(new Error('stream socket error')));
     socket.addEventListener('close', (event: CloseEvent) => this.handleClose(event.code, event.reason));
   }
 
   /** Sends one message, encoded per `options.encode` (JSON by default). Throws if the socket isn't open. */
   send(message: unknown): void {
     if (!this.socket || this.socket.readyState !== WS_OPEN) throw new Error('stream socket is not open');
-    const encode = this.options.encode ?? ((m: unknown) => JSON.stringify(m));
-    this.socket.send(encode(message));
+    this.socket.send((this.options.encode ?? encodeJson)(message));
   }
 
   /**
@@ -155,13 +181,13 @@ export class StreamClient implements AsyncIterable<StreamEvent> {
    * key's latest message wins).
    */
   subscribe(key: string, message: unknown): void {
-    this.subscriptions.set(key, message);
+    this.track(key, message);
     if (this._state === 'open') this.send(message);
   }
 
   /** Sends an unsubscribe message and forgets `key`, so it's no longer replayed on reconnect. */
   unsubscribe(key: string, message: unknown): void {
-    this.subscriptions.delete(key);
+    this.forget(key);
     if (this._state === 'open') this.send(message);
   }
 
@@ -181,12 +207,12 @@ export class StreamClient implements AsyncIterable<StreamEvent> {
     this.clearIdleTimer();
     if (this._state === 'closed') return;
     this.intentionalClose = true;
+    // No live socket to hand off to a close handshake - finalize synchronously.
     if (this._state === 'idle' || this._state === 'reconnecting') {
-      this._state = 'closed';
-      this.events.end();
+      this.finalize();
       return;
     }
-    if (this._state === 'closing') return;
+    if (this._state === 'closing') return; // already handshaking; handleClose will finalize
     this._state = 'closing';
     this.socket?.close(code, reason);
   }
@@ -202,7 +228,7 @@ export class StreamClient implements AsyncIterable<StreamEvent> {
     try {
       this.send(this.options.auth());
     } catch (err) {
-      this.events.push({ type: 'error', error: err instanceof Error ? err : new Error(String(err)) });
+      this.emitError(err);
     }
   }
 
@@ -210,18 +236,19 @@ export class StreamClient implements AsyncIterable<StreamEvent> {
     this.resetIdleTimer();
     let decoded: unknown;
     try {
-      decoded = this.decode(data as string | ArrayBuffer);
+      decoded = (this.options.decode ?? decodeJson)(data as string | ArrayBuffer);
     } catch (err) {
-      this.events.push({ type: 'error', error: err instanceof Error ? err : new Error(String(err)) });
+      this.emitError(err);
       return;
     }
+    // A frame may carry one message or an array of them; fan an array out into individual messages.
     for (const message of Array.isArray(decoded) ? decoded : [decoded]) this.processMessage(message);
   }
 
   private processMessage(message: unknown): void {
     if (this._state === 'authenticating' && this.options.isAuthenticated(message)) {
       this._state = 'open';
-      this.reconnectAttempt = 0;
+      this.reconnectAttempt = 0; // a successful (re)connect resets the backoff
       for (const subscribed of this.subscriptions.values()) this.send(subscribed);
       this.events.push({ type: 'authenticated' });
       return;
@@ -233,12 +260,17 @@ export class StreamClient implements AsyncIterable<StreamEvent> {
     this.clearIdleTimer();
     this.socket = undefined;
     if (this.intentionalClose || !this.reconnectOpts) {
-      this._state = 'closed';
-      this.events.end();
+      this.finalize();
       return;
     }
     this._state = 'reconnecting';
     this.scheduleReconnect();
+  }
+
+  /** Terminal transition: no more reconnects, end the event stream. */
+  private finalize(): void {
+    this._state = 'closed';
+    this.events.end();
   }
 
   private scheduleReconnect(): void {
@@ -261,7 +293,7 @@ export class StreamClient implements AsyncIterable<StreamEvent> {
     const timeoutMs = this.options.idleTimeoutMs;
     if (!timeoutMs) return;
     this.idleTimer = setTimeout(() => {
-      this.events.push({ type: 'error', error: new Error('stream idle timeout - no messages received, reconnecting') });
+      this.emitError(new Error('stream idle timeout - no messages received, reconnecting'));
       // Proactively tear down (state -> 'closing', so send()/subscribe() correctly see "not open" during the
       // close handshake) without marking it intentional, so handleClose() schedules a fresh reconnect.
       this._state = 'closing';
@@ -274,18 +306,7 @@ export class StreamClient implements AsyncIterable<StreamEvent> {
     this.idleTimer = undefined;
   }
 
-  private decode(data: string | ArrayBuffer): unknown {
-    if (this.options.decode) return this.options.decode(data);
-    // Default: UTF-8 text + JSON.parse, regardless of whether the frame arrived as a text or
-    // binary-opcode WS frame. Confirmed against the real API: several Alpaca streams (trading,
-    // option data) send JSON as *binary*-opcode frames - "binary frames" in their docs describes
-    // the WS opcode, not the codec - while others (stock/crypto/news data) use text frames. A
-    // frame that's neither valid UTF-8-as-JSON nor handled by a custom `decode` (e.g. real
-    // MessagePack, which needs a `Content-Type` header this client has no way to set) surfaces as
-    // an `error` event via the catch in `handleMessage`, same as any other decode failure.
-    const text = typeof data === 'string' ? data : DECODER.decode(data);
-    return JSON.parse(text);
+  private emitError(err: unknown): void {
+    this.events.push({ type: 'error', error: asError(err) });
   }
 }
-
-const DECODER = new TextDecoder();
