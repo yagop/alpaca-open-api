@@ -1,18 +1,22 @@
 /**
  * Trading stream - real-time order lifecycle events (`trade_updates`) over
- * Alpaca's account WebSocket. Binary msgpack frames by default (decoded with
- * the hand-rolled decoder in `./msgpack`), auth/listen handshake (not the
+ * Alpaca's account WebSocket. Auth/listen handshake (not the
  * subscribe/unsubscribe one the market-data streams use - there's exactly
- * one channel, your whole account, so it's auto-listened on every connect
- * and reconnect via the base client's subscription replay).
+ * one channel, your whole account, so it's listened once at construction
+ * time and replayed automatically by the base client on every reconnect).
+ *
+ * Frames arrive as JSON text inside *binary-opcode* WebSocket frames by
+ * default - confirmed against the real paper API. Alpaca's docs describe an
+ * opt-in MessagePack codec (`Content-Type: application/msgpack`), but that
+ * needs a custom request header the standard `WebSocket` API has no way to
+ * set, so it's unreachable via this client unless you supply a `decode`
+ * override backed by a transport that can set it (see `./msgpack`).
  *
  * @see https://docs.alpaca.markets/docs/websocket-streaming
  */
 
-import { EventEmitter } from 'node:events';
 import type { Order } from '../generated/trading/model';
-import { AsyncQueue, StreamClient, type ReconnectOptions } from './client';
-import { decode } from './msgpack';
+import { StreamClient, type ReconnectOptions } from './client';
 import { tradingStreamUrl } from './routes';
 
 /** All `data.event` values Alpaca's trade_updates stream can send. */
@@ -46,20 +50,21 @@ export interface TradeUpdate {
   position_qty?: string;
 }
 
-export interface TradingStreamEvents {
-  open: [];
-  authenticated: [];
-  trade_update: [TradeUpdate];
-  error: [Error];
-  close: [{ code: number; reason: string }];
-  reconnecting: [{ attempt: number; delayMs: number }];
-}
+/** Everything `TradingStreamClient` can yield. */
+export type TradingStreamEvent =
+  | { type: 'open' }
+  | { type: 'authenticated' }
+  | { type: 'reconnecting'; attempt: number; delayMs: number }
+  | { type: 'error'; error: Error }
+  | { type: 'trade_update'; update: TradeUpdate };
 
 export interface TradingStreamOptions {
   /** Defaults to `ALPACA_API_KEY`. */
   apiKey?: string;
   /** Defaults to `ALPACA_API_SECRET`. */
   apiSecret?: string;
+  /** Decodes one inbound frame. Defaults to UTF-8 text + `JSON.parse` (the real default codec - see module doc). */
+  decode?(data: string | ArrayBuffer): unknown;
   reconnect?: ReconnectOptions | false;
   idleTimeoutMs?: number;
   /** `WebSocket` constructor to use - override in tests. */
@@ -67,6 +72,7 @@ export interface TradingStreamOptions {
 }
 
 const LISTEN_KEY = 'trade_updates';
+const TEXT = new TextDecoder();
 
 interface AuthorizationMessage {
   stream: 'authorization';
@@ -86,47 +92,34 @@ function isTradeUpdateMessage(message: unknown): message is TradeUpdateMessage {
   return !!message && typeof message === 'object' && (message as { stream?: unknown }).stream === 'trade_updates';
 }
 
-/** The trading stream is binary (msgpack) only - a text frame would mean the server changed protocol. */
-function decodeFrame(data: string | ArrayBuffer): unknown {
-  if (typeof data === 'string') throw new Error('trading stream: unexpected text frame (expected binary msgpack)');
-  return decode(data);
+function decodeJsonFrame(data: string | ArrayBuffer): unknown {
+  const text = typeof data === 'string' ? data : TEXT.decode(data);
+  return JSON.parse(text);
 }
 
 /**
- * Connects to the trading stream and emits typed `trade_update` events
- * (`EventEmitter`) plus an `AsyncIterable<TradeUpdate>`. Everything else
- * (reconnect/backoff, idle detection, re-listening after a reconnect) is
- * inherited from {@link StreamClient}.
+ * Connects to the trading stream and is an `AsyncIterable<TradingStreamEvent>`.
+ * Everything else (reconnect/backoff, idle detection, re-listening after a
+ * reconnect) is inherited from {@link StreamClient}.
  */
-export class TradingStreamClient extends EventEmitter<TradingStreamEvents> implements AsyncIterable<TradeUpdate> {
+export class TradingStreamClient implements AsyncIterable<TradingStreamEvent> {
   private readonly client: StreamClient;
-  private readonly updates = new AsyncQueue<TradeUpdate>();
 
   constructor(options: TradingStreamOptions = {}) {
-    super();
     const key = options.apiKey ?? process.env.ALPACA_API_KEY ?? '';
     const secret = options.apiSecret ?? process.env.ALPACA_API_SECRET ?? '';
     this.client = new StreamClient({
       url: tradingStreamUrl,
       auth: () => ({ action: 'auth', key, secret }),
-      decode: decodeFrame,
+      decode: options.decode ?? decodeJsonFrame,
       isAuthenticated: (message) => isAuthorizationMessage(message) && message.data.status === 'authorized',
       reconnect: options.reconnect,
       idleTimeoutMs: options.idleTimeoutMs,
       WebSocketImpl: options.WebSocketImpl,
     });
-    this.client.on('open', () => this.emit('open'));
-    this.client.on('authenticated', () => {
-      this.client.subscribe(LISTEN_KEY, { action: 'listen', data: { streams: [LISTEN_KEY] } });
-      this.emit('authenticated');
-    });
-    this.client.on('error', (err) => this.emit('error', err));
-    this.client.on('reconnecting', (e) => this.emit('reconnecting', e));
-    this.client.on('close', (e) => {
-      this.emit('close', e);
-      this.updates.end();
-    });
-    this.client.on('message', (message) => this.handleMessage(message));
+    // Registered once - the base client resends this on every successful auth, including
+    // after every reconnect, with no further action needed here.
+    this.client.subscribe(LISTEN_KEY, { action: 'listen', data: { streams: [LISTEN_KEY] } });
   }
 
   get state() {
@@ -141,17 +134,34 @@ export class TradingStreamClient extends EventEmitter<TradingStreamEvents> imple
     this.client.close(code, reason);
   }
 
-  [Symbol.asyncIterator](): AsyncIterator<TradeUpdate> {
-    return this.updates[Symbol.asyncIterator]();
-  }
-
-  private handleMessage(message: unknown): void {
-    if (isAuthorizationMessage(message)) {
-      if (message.data.status === 'unauthorized') this.emit('error', new Error('trading stream: unauthorized'));
-      return; // the 'authorized' case already drove the base client to 'open' before this fired
+  async *[Symbol.asyncIterator](): AsyncGenerator<TradingStreamEvent> {
+    this.client.connect();
+    for await (const event of this.client) {
+      switch (event.type) {
+        case 'open':
+        case 'reconnecting':
+        case 'error':
+          yield event;
+          break;
+        case 'authenticated':
+          yield { type: 'authenticated' };
+          break;
+        case 'message': {
+          const { message } = event;
+          if (isAuthorizationMessage(message)) {
+            if (message.data.status === 'unauthorized') {
+              // Retrying with the same credentials won't fix this - surface it, then stop for good.
+              this.client.close();
+              yield { type: 'error', error: new Error('trading stream: unauthorized') };
+              return;
+            }
+            break; // the 'authorized' case already drove the base client to 'open' before this could fire
+          }
+          if (!isTradeUpdateMessage(message)) break; // e.g. the "listening" ack - nothing to surface
+          yield { type: 'trade_update', update: message.data };
+          break;
+        }
+      }
     }
-    if (!isTradeUpdateMessage(message)) return; // e.g. the "listening" ack - nothing to surface
-    this.emit('trade_update', message.data);
-    this.updates.push(message.data);
   }
 }

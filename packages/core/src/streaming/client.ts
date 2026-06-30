@@ -10,11 +10,15 @@
  * via {@link StreamClientOptions}; this class only owns what's identical
  * across every stream: connection lifecycle, auth sequencing, subscription
  * replay on reconnect, idle/stale detection and backoff.
+ *
+ * Consumer API is a single `AsyncIterable<StreamEvent>` - deliberately no
+ * `EventEmitter`. Node's `EventEmitter` throws (crashing the process) when an
+ * `'error'` is emitted with no listener attached, which is exactly the kind
+ * of "forgot to wire something up" mistake a streaming client should not be
+ * able to turn into a crash. An unread async-iterator event is just inert.
  */
 
-import { EventEmitter } from 'node:events';
-
-export type StreamClientState = 'idle' | 'connecting' | 'authenticating' | 'open' | 'closing' | 'closed';
+export type StreamClientState = 'idle' | 'connecting' | 'authenticating' | 'open' | 'closing' | 'reconnecting' | 'closed';
 
 /** Exponential backoff for automatic reconnects. */
 export interface ReconnectOptions {
@@ -26,14 +30,13 @@ export interface ReconnectOptions {
   factor?: number;
 }
 
-export interface StreamClientEvents {
-  open: [];
-  authenticated: [];
-  message: [unknown];
-  error: [Error];
-  close: [{ code: number; reason: string }];
-  reconnecting: [{ attempt: number; delayMs: number }];
-}
+/** Everything `StreamClient` can yield - lifecycle plus decoded application messages. */
+export type StreamEvent =
+  | { type: 'open' }
+  | { type: 'authenticated' }
+  | { type: 'reconnecting'; attempt: number; delayMs: number }
+  | { type: 'error'; error: Error }
+  | { type: 'message'; message: unknown };
 
 export interface StreamClientOptions {
   /** Resolves the WebSocket URL; called on every (re)connect. */
@@ -60,9 +63,11 @@ const WS_OPEN = 1;
 
 /**
  * A minimal async pull queue - decouples push-style event emission from
- * pull-style async iteration. Shared by `StreamClient` (for its raw `message`
- * stream) and the typed per-stream clients built on top of it (trading,
- * market data), so each doesn't reimplement the same buffering.
+ * pull-style async iteration. Shared by `StreamClient` and the typed
+ * per-stream clients built on top of it, so each doesn't reimplement the
+ * same buffering. Single-consumer by design: a second concurrent `next()`
+ * call (rather than silently splitting messages round-robin between two
+ * readers) rejects loudly, since that's always a usage mistake here.
  */
 export class AsyncQueue<T> implements AsyncIterable<T> {
   private readonly items: T[] = [];
@@ -70,13 +75,15 @@ export class AsyncQueue<T> implements AsyncIterable<T> {
   private done = false;
 
   push(item: T): void {
+    if (this.done) return;
     const pull = this.pulls.shift();
     if (pull) pull({ value: item, done: false });
     else this.items.push(item);
   }
 
-  /** Ends the stream - pending and future `next()` calls resolve `{ done: true }`. */
+  /** Ends the stream - pending and future `next()` calls resolve `{ done: true }`. Idempotent. */
   end(): void {
+    if (this.done) return;
     this.done = true;
     while (this.pulls.length) this.pulls.shift()!({ value: undefined as never, done: true });
   }
@@ -86,6 +93,7 @@ export class AsyncQueue<T> implements AsyncIterable<T> {
       next: (): Promise<IteratorResult<T>> => {
         if (this.items.length) return Promise.resolve({ value: this.items.shift() as T, done: false });
         if (this.done) return Promise.resolve({ value: undefined as never, done: true });
+        if (this.pulls.length) return Promise.reject(new Error('AsyncQueue: next() was called concurrently by more than one consumer'));
         return new Promise((resolve) => this.pulls.push(resolve));
       },
     };
@@ -95,21 +103,22 @@ export class AsyncQueue<T> implements AsyncIterable<T> {
 /**
  * Connects, authenticates, tracks subscriptions for replay, and reconnects
  * with backoff. Subclasses (or callers) interpret decoded messages - this
- * class only emits the generic `message` event plus connection-lifecycle
- * events, and is itself an `AsyncIterable<unknown>` over messages.
+ * class only yields lifecycle events plus the generic decoded `message`,
+ * as an `AsyncIterable<StreamEvent>`.
  */
-export class StreamClient extends EventEmitter<StreamClientEvents> implements AsyncIterable<unknown> {
+export class StreamClient implements AsyncIterable<StreamEvent> {
   private socket: WebSocket | undefined;
   private _state: StreamClientState = 'idle';
+  /** Set only by the public `close()` - distinguishes "won't reconnect" from a transient/idle-forced close. */
+  private intentionalClose = false;
   private reconnectAttempt = 0;
   private reconnectTimer: ReturnType<typeof setTimeout> | undefined;
   private idleTimer: ReturnType<typeof setTimeout> | undefined;
   private readonly subscriptions = new Map<string, unknown>();
-  private readonly messages = new AsyncQueue<unknown>();
+  private readonly events = new AsyncQueue<StreamEvent>();
   private readonly reconnectOpts: Required<ReconnectOptions> | false;
 
   constructor(private readonly options: StreamClientOptions) {
-    super();
     this.reconnectOpts = options.reconnect === false ? false : { ...DEFAULT_RECONNECT, ...options.reconnect };
   }
 
@@ -117,10 +126,11 @@ export class StreamClient extends EventEmitter<StreamClientEvents> implements As
     return this._state;
   }
 
-  /** Opens the connection. A no-op while already connecting/authenticating/open. */
+  /** Opens the connection. A no-op while already connecting/authenticating/open/closing; cancels a pending reconnect otherwise. */
   connect(): void {
-    if (this._state === 'connecting' || this._state === 'authenticating' || this._state === 'open') return;
+    if (this._state === 'connecting' || this._state === 'authenticating' || this._state === 'open' || this._state === 'closing') return;
     this.clearReconnectTimer();
+    this.intentionalClose = false;
     this._state = 'connecting';
     const WebSocketImpl = this.options.WebSocketImpl ?? globalThis.WebSocket;
     const socket = new WebSocketImpl(this.options.url());
@@ -128,7 +138,7 @@ export class StreamClient extends EventEmitter<StreamClientEvents> implements As
     this.socket = socket;
     socket.addEventListener('open', () => this.handleOpen());
     socket.addEventListener('message', (event: MessageEvent) => this.handleMessage(event.data));
-    socket.addEventListener('error', () => this.emit('error', new Error('stream socket error')));
+    socket.addEventListener('error', () => this.events.push({ type: 'error', error: new Error('stream socket error') }));
     socket.addEventListener('close', (event: CloseEvent) => this.handleClose(event.code, event.reason));
   }
 
@@ -141,7 +151,8 @@ export class StreamClient extends EventEmitter<StreamClientEvents> implements As
 
   /**
    * Sends a subscribe message and remembers it under `key` so it's replayed
-   * automatically after a reconnect (each key's latest message wins).
+   * automatically on every future auth, including after a reconnect (each
+   * key's latest message wins).
    */
   subscribe(key: string, message: unknown): void {
     this.subscriptions.set(key, message);
@@ -154,33 +165,44 @@ export class StreamClient extends EventEmitter<StreamClientEvents> implements As
     if (this._state === 'open') this.send(message);
   }
 
+  /** Updates what's replayed under `key` on the next auth, without sending anything right now - for callers managing their own wire sends. */
+  track(key: string, message: unknown): void {
+    this.subscriptions.set(key, message);
+  }
+
+  /** Stops tracking `key` for replay without sending anything - for callers managing their own unsubscribe wire message. */
+  forget(key: string): void {
+    this.subscriptions.delete(key);
+  }
+
   /** Closes the connection and disables auto-reconnect. Safe to call before `connect()` or more than once. */
   close(code = 1000, reason = ''): void {
     this.clearReconnectTimer();
     this.clearIdleTimer();
-    if (this._state === 'closed' || this._state === 'closing') return;
-    if (this.socket && this.socket.readyState <= WS_OPEN) {
-      this._state = 'closing';
-      this.socket.close(code, reason);
+    if (this._state === 'closed') return;
+    this.intentionalClose = true;
+    if (this._state === 'idle' || this._state === 'reconnecting') {
+      this._state = 'closed';
+      this.events.end();
       return;
     }
-    this._state = 'closed';
-    this.emit('close', { code, reason });
-    this.messages.end();
+    if (this._state === 'closing') return;
+    this._state = 'closing';
+    this.socket?.close(code, reason);
   }
 
-  [Symbol.asyncIterator](): AsyncIterator<unknown> {
-    return this.messages[Symbol.asyncIterator]();
+  [Symbol.asyncIterator](): AsyncIterator<StreamEvent> {
+    return this.events[Symbol.asyncIterator]();
   }
 
   private handleOpen(): void {
     this._state = 'authenticating';
     this.resetIdleTimer();
-    this.emit('open');
+    this.events.push({ type: 'open' });
     try {
       this.send(this.options.auth());
     } catch (err) {
-      this.emit('error', err instanceof Error ? err : new Error(String(err)));
+      this.events.push({ type: 'error', error: err instanceof Error ? err : new Error(String(err)) });
     }
   }
 
@@ -190,7 +212,7 @@ export class StreamClient extends EventEmitter<StreamClientEvents> implements As
     try {
       decoded = this.decode(data as string | ArrayBuffer);
     } catch (err) {
-      this.emit('error', err instanceof Error ? err : new Error(String(err)));
+      this.events.push({ type: 'error', error: err instanceof Error ? err : new Error(String(err)) });
       return;
     }
     for (const message of Array.isArray(decoded) ? decoded : [decoded]) this.processMessage(message);
@@ -201,24 +223,22 @@ export class StreamClient extends EventEmitter<StreamClientEvents> implements As
       this._state = 'open';
       this.reconnectAttempt = 0;
       for (const subscribed of this.subscriptions.values()) this.send(subscribed);
-      this.emit('authenticated');
+      this.events.push({ type: 'authenticated' });
       return;
     }
-    this.emit('message', message);
-    this.messages.push(message);
+    this.events.push({ type: 'message', message });
   }
 
-  private handleClose(code: number, reason: string): void {
+  private handleClose(_code: number, _reason: string): void {
     this.clearIdleTimer();
     this.socket = undefined;
-    const closingIntentionally = this._state === 'closing';
-    this._state = 'closed';
-    if (!closingIntentionally && this.reconnectOpts) {
-      this.scheduleReconnect();
+    if (this.intentionalClose || !this.reconnectOpts) {
+      this._state = 'closed';
+      this.events.end();
       return;
     }
-    this.emit('close', { code, reason });
-    this.messages.end();
+    this._state = 'reconnecting';
+    this.scheduleReconnect();
   }
 
   private scheduleReconnect(): void {
@@ -226,7 +246,7 @@ export class StreamClient extends EventEmitter<StreamClientEvents> implements As
     const { initialDelayMs, maxDelayMs, factor } = this.reconnectOpts;
     const delayMs = Math.min(maxDelayMs, initialDelayMs * factor ** this.reconnectAttempt);
     this.reconnectAttempt++;
-    this.emit('reconnecting', { attempt: this.reconnectAttempt, delayMs });
+    this.events.push({ type: 'reconnecting', attempt: this.reconnectAttempt, delayMs });
     this.reconnectTimer = setTimeout(() => this.connect(), delayMs);
   }
 
@@ -241,7 +261,10 @@ export class StreamClient extends EventEmitter<StreamClientEvents> implements As
     const timeoutMs = this.options.idleTimeoutMs;
     if (!timeoutMs) return;
     this.idleTimer = setTimeout(() => {
-      this.emit('error', new Error('stream idle timeout - no messages received, reconnecting'));
+      this.events.push({ type: 'error', error: new Error('stream idle timeout - no messages received, reconnecting') });
+      // Proactively tear down (state -> 'closing', so send()/subscribe() correctly see "not open" during the
+      // close handshake) without marking it intentional, so handleClose() schedules a fresh reconnect.
+      this._state = 'closing';
       this.socket?.close();
     }, timeoutMs);
   }

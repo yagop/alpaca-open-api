@@ -1,5 +1,5 @@
 {
-  "//": "Regression gate: type-check the emitted declarations under Node-style resolution (node16/nodenext) so a published consumer that does not set skipLibCheck cannot hit TS2834. Run after fix-dts-extensions.ts as part of the build. `types: [\"node\"]` - the streaming clients' public surface extends node:events' EventEmitter, so @types/node is a legitimate expectation for a Node>=22-only package, not just an implicit global.",
+  "//": "Regression gate: type-check the emitted declarations under Node-style resolution (node16/nodenext) so a published consumer that does not set skipLibCheck cannot hit TS2834. Run after fix-dts-extensions.ts as part of the build.",
   "compilerOptions": {
     "module": "nodenext",
     "moduleResolution": "nodenext",
@@ -7,7 +7,7 @@
     "noEmit": true,
     "skipLibCheck": false,
     "strict": true,
-    "types": ["node"]
+    "types": []
   },
   "include": ["dist/**/*.d.ts"]
 }

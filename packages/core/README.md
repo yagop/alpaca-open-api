@@ -50,21 +50,23 @@ import { TradingStreamClient, stockDataStream } from '@alpaca-open-api/core';
 
 // Order lifecycle events for your account.
 const trading = new TradingStreamClient();
-trading.on('trade_update', (u) => console.log(u.event, u.order.symbol, u.price));
 trading.connect();
+for await (const event of trading) {
+  if (event.type === 'trade_update') console.log(event.update.event, event.update.order.symbol, event.update.price);
+}
 
 // Real-time stock trades/quotes/bars (feed defaults to 'iex').
 const stocks = stockDataStream();
-stocks.on('authenticated', () => stocks.subscribe({ trades: ['AAPL'], quotes: ['AAPL'] }));
+stocks.subscribe({ trades: ['AAPL'], quotes: ['AAPL'] }); // sent once authenticated; re-sent after any reconnect
 stocks.connect();
-for await (const message of stocks) {
-  if (message.T === 't') console.log('trade', message.S, message.p);
+for await (const event of stocks) {
+  if (event.type === 'message' && event.message.T === 't') console.log('trade', event.message.S, event.message.p);
 }
 ```
 
-`cryptoDataStream()`, `optionDataStream()`, `newsDataStream()` are the same shape for the other feeds. Every client is both an `EventEmitter` (`open`, `authenticated`, `message`/`trade_update`, `error`, `close`, `reconnecting`) and an `AsyncIterable` over its typed messages - use whichever fits. Connections auto-reconnect with backoff and re-subscribe automatically; call `.close()` to stop for good.
+`cryptoDataStream()`, `optionDataStream()`, `newsDataStream()` are the same shape for the other feeds. Every client is a plain `AsyncIterable` over a typed `{type: ...}` event union (`open`, `authenticated`, `message`/`trade_update`, `error`, `reconnecting`, plus `subscription` for market data) - no `EventEmitter`, so there's no listener to forget to attach; an event you don't care about is just a `case` you don't switch on. Connections auto-reconnect with backoff and re-subscribe automatically; call `.close()` to stop for good, which ends the loop (`done: true`).
 
-**Design decisions:** the native global `WebSocket` (Bun + Node ≥22 - no dependency, hence this package's `engines.node: >=22`); a small hand-rolled MessagePack **decoder** for the trading stream's binary `trade_updates` frames (decode-only, no dependency - encoding isn't needed since `auth`/`listen`/`subscribe` are JSON); `EventEmitter` plus async-iterator as the consumer API, matching the rest of the package's typed-but-unopinionated style.
+**Design decisions:** the native global `WebSocket` (Bun + Node ≥22 - no dependency, hence this package's `engines.node: >=22`); the trading stream's frames are JSON inside *binary-opcode* WebSocket frames by default (confirmed against the real API) - Alpaca's optional MessagePack codec needs a `Content-Type` request header the standard `WebSocket` API can't set, so it's unreachable here unless you supply your own `decode`; a small hand-rolled MessagePack **decoder** (`./streaming/msgpack`, decode-only, no dependency) is still available for that case; the consumer API is `AsyncIterable` only, deliberately not `EventEmitter` - Node's `EventEmitter` throws (crashing the process) on an unhandled `'error'` event, which is exactly the kind of mistake a streaming client shouldn't be able to turn into a crash.
 
 ## Configuration
 

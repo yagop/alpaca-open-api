@@ -6,12 +6,17 @@
  * single generic client (`MarketDataStreamClient`) implements it once, and
  * four tiny factories below wire it to the right host/feed and message type.
  *
+ * Subscriptions are tracked as one merged `{channel: symbols[]}` message
+ * under a single replay key on the base `StreamClient` - it resends the
+ * latest full desired state on every successful auth (incl. after a
+ * reconnect) automatically, so this client doesn't need to watch for an
+ * "authenticated" signal itself to re-subscribe.
+ *
  * @see https://docs.alpaca.markets/docs/streaming-market-data
  */
 
-import { EventEmitter } from 'node:events';
 import type { CryptoBar, CryptoQuote, CryptoTrade, News, OptionQuote, OptionTrade, StockBar, StockQuote, StockTrade } from '../generated/data/model';
-import { AsyncQueue, StreamClient, type ReconnectOptions } from './client';
+import { StreamClient, type ReconnectOptions } from './client';
 import { cryptoStreamUrl, newsStreamUrl, optionStreamUrl, stockStreamUrl, type OptionFeed, type StockFeed } from './routes';
 
 /** A stock trade/quote/bar event - REST model shape plus the streaming envelope (`T`, `S`). */
@@ -29,15 +34,14 @@ export interface SubscriptionAck {
   [channel: string]: unknown;
 }
 
-export interface MarketDataStreamEvents<TMessage> {
-  open: [];
-  authenticated: [];
-  message: [TMessage];
-  subscription: [SubscriptionAck];
-  error: [Error];
-  close: [{ code: number; reason: string }];
-  reconnecting: [{ attempt: number; delayMs: number }];
-}
+/** Everything `MarketDataStreamClient` can yield. */
+export type MarketDataStreamEvent<TMessage> =
+  | { type: 'open' }
+  | { type: 'authenticated' }
+  | { type: 'reconnecting'; attempt: number; delayMs: number }
+  | { type: 'error'; error: Error }
+  | { type: 'subscription'; ack: SubscriptionAck }
+  | { type: 'message'; message: TMessage };
 
 export interface MarketDataStreamOptions {
   /** Defaults to `ALPACA_API_KEY`. */
@@ -49,6 +53,8 @@ export interface MarketDataStreamOptions {
   /** `WebSocket` constructor to use - override in tests. */
   WebSocketImpl?: typeof WebSocket;
 }
+
+const SUBSCRIPTION_KEY = 'subscriptions';
 
 interface ControlMessage {
   T: 'success' | 'error';
@@ -70,22 +76,13 @@ function isSubscriptionAck(message: unknown): message is SubscriptionAck {
 
 /**
  * Connects to one market-data feed (stocks/crypto/options/news - see the
- * factories below) and emits typed events plus an `AsyncIterable<TMessage>`.
- * Subscriptions are tracked locally as the desired `{channel: Set<symbol>}`
- * state and resent in full on every `authenticated` (incl. after a
- * reconnect) - the wire protocol's `subscribe` is additive, so resending the
- * full set is a no-op for what the server already has.
+ * factories below) and is an `AsyncIterable<MarketDataStreamEvent<TMessage>>`.
  */
-export class MarketDataStreamClient<TMessage extends { T: string }>
-  extends EventEmitter<MarketDataStreamEvents<TMessage>>
-  implements AsyncIterable<TMessage>
-{
+export class MarketDataStreamClient<TMessage extends { T: string }> implements AsyncIterable<MarketDataStreamEvent<TMessage>> {
   private readonly client: StreamClient;
   private readonly desired: Record<string, Set<string>> = {};
-  private readonly stream = new AsyncQueue<TMessage>();
 
   constructor(options: MarketDataStreamOptions & { url(): string }) {
-    super();
     const key = options.apiKey ?? process.env.ALPACA_API_KEY ?? '';
     const secret = options.apiSecret ?? process.env.ALPACA_API_SECRET ?? '';
     this.client = new StreamClient({
@@ -96,18 +93,6 @@ export class MarketDataStreamClient<TMessage extends { T: string }>
       idleTimeoutMs: options.idleTimeoutMs,
       WebSocketImpl: options.WebSocketImpl,
     });
-    this.client.on('open', () => this.emit('open'));
-    this.client.on('authenticated', () => {
-      this.resend();
-      this.emit('authenticated');
-    });
-    this.client.on('error', (err) => this.emit('error', err));
-    this.client.on('reconnecting', (e) => this.emit('reconnecting', e));
-    this.client.on('close', (e) => {
-      this.emit('close', e);
-      this.stream.end();
-    });
-    this.client.on('message', (message) => this.handleMessage(message));
   }
 
   get state() {
@@ -122,13 +107,16 @@ export class MarketDataStreamClient<TMessage extends { T: string }>
     this.client.close(code, reason);
   }
 
-  [Symbol.asyncIterator](): AsyncIterator<TMessage> {
-    return this.stream[Symbol.asyncIterator]();
-  }
-
-  /** Subscribes to symbols per channel, e.g. `{trades: ['AAPL'], quotes: ['AAPL']}`. Merges into the tracked desired state. */
+  /**
+   * Subscribes to symbols per channel, e.g. `{trades: ['AAPL'], quotes: ['AAPL']}`. Merges into the
+   * tracked desired state and sends only the incremental `channels` given here - the full merged
+   * state is tracked separately (via `track()`, no extra send) purely so it can be replayed in one
+   * message after a reconnect.
+   */
   subscribe(channels: Record<string, string[]>): void {
     this.merge(channels, true);
+    const full = this.fullSubscribeMessage();
+    if (full) this.client.track(SUBSCRIPTION_KEY, full);
     if (this.client.state === 'open') this.client.send({ action: 'subscribe', ...channels });
   }
 
@@ -136,6 +124,39 @@ export class MarketDataStreamClient<TMessage extends { T: string }>
   unsubscribe(channels: Record<string, string[]>): void {
     this.merge(channels, false);
     if (this.client.state === 'open') this.client.send({ action: 'unsubscribe', ...channels });
+    const full = this.fullSubscribeMessage();
+    if (full) this.client.track(SUBSCRIPTION_KEY, full);
+    else this.client.forget(SUBSCRIPTION_KEY);
+  }
+
+  async *[Symbol.asyncIterator](): AsyncGenerator<MarketDataStreamEvent<TMessage>> {
+    this.client.connect();
+    for await (const event of this.client) {
+      switch (event.type) {
+        case 'open':
+        case 'reconnecting':
+        case 'error':
+          yield event;
+          break;
+        case 'authenticated':
+          yield { type: 'authenticated' };
+          break;
+        case 'message': {
+          const { message } = event;
+          if (isControlMessage(message, 'connected')) break; // the initial handshake greeting - nothing to surface
+          if (isSubscriptionAck(message)) {
+            yield { type: 'subscription', ack: message };
+            break;
+          }
+          if (isErrorMessage(message)) {
+            yield { type: 'error', error: new Error(`market data stream: ${message.msg} (code ${message.code})`) };
+            break;
+          }
+          yield { type: 'message', message: message as TMessage };
+          break;
+        }
+      }
+    }
   }
 
   private merge(channels: Record<string, string[]>, add: boolean): void {
@@ -146,26 +167,10 @@ export class MarketDataStreamClient<TMessage extends { T: string }>
     }
   }
 
-  /** Resends the full desired subscription state - called once right after each successful auth. */
-  private resend(): void {
+  private fullSubscribeMessage(): Record<string, unknown> | undefined {
     const entries = Object.entries(this.desired).filter(([, set]) => set.size > 0);
-    if (!entries.length) return;
-    this.client.send({ action: 'subscribe', ...Object.fromEntries(entries.map(([channel, set]) => [channel, [...set]])) });
-  }
-
-  private handleMessage(message: unknown): void {
-    if (isControlMessage(message, 'connected')) return; // the initial handshake greeting - nothing to surface
-    if (isSubscriptionAck(message)) {
-      this.emit('subscription', message);
-      return;
-    }
-    if (isErrorMessage(message)) {
-      this.emit('error', new Error(`market data stream: ${message.msg} (code ${message.code})`));
-      return;
-    }
-    const typed = message as TMessage;
-    this.emit('message', typed);
-    this.stream.push(typed);
+    if (!entries.length) return undefined;
+    return { action: 'subscribe', ...Object.fromEntries(entries.map(([channel, set]) => [channel, [...set]])) };
   }
 }
 

@@ -33,15 +33,16 @@ export * as authxModel from './generated/authx/model';
 // so (like the mutator) there's nothing to generate. See the README's Streaming
 // section for usage. `StreamClient` is the shared connect/auth/reconnect engine;
 // `TradingStreamClient` and the `*DataStream` factories are the typed, ready-to-use
-// clients built on it.
-export { StreamClient } from './streaming/client';
-export type { ReconnectOptions, StreamClientEvents, StreamClientOptions, StreamClientState } from './streaming/client';
+// clients built on it. Each is a plain `AsyncIterable` - no `EventEmitter` - so
+// there's no event to forget to listen for; `for await` is the only consumer API.
+export { AsyncQueue, StreamClient } from './streaming/client';
+export type { ReconnectOptions, StreamClientOptions, StreamClientState, StreamEvent } from './streaming/client';
 export { TradingStreamClient } from './streaming/trading-client';
-export type { TradeUpdate, TradeUpdateEvent, TradingStreamEvents, TradingStreamOptions } from './streaming/trading-client';
+export type { TradeUpdate, TradeUpdateEvent, TradingStreamEvent, TradingStreamOptions } from './streaming/trading-client';
 export { cryptoDataStream, MarketDataStreamClient, newsDataStream, optionDataStream, stockDataStream } from './streaming/market-data-client';
 export type {
   CryptoMessage,
-  MarketDataStreamEvents,
+  MarketDataStreamEvent,
   MarketDataStreamOptions,
   NewsMessage,
   OptionMessage,
@@ -49,3 +50,7 @@ export type {
   SubscriptionAck,
 } from './streaming/market-data-client';
 export type { OptionFeed, StockFeed } from './streaming/routes';
+// Unused by default (the trading stream's real default codec is JSON, not msgpack - see
+// trading-client.ts's module doc) - exported so `TradingStreamOptions.decode` can be set to
+// it if your transport does negotiate the `Content-Type: application/msgpack` codec.
+export { decode as decodeMsgPack } from './streaming/msgpack';

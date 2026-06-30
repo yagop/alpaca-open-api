@@ -1,55 +1,6 @@
 import { expect, test } from 'bun:test';
-import { StreamClient, type StreamClientOptions } from './client';
-
-// A minimal stand-in for the global `WebSocket` - just enough surface for
-// StreamClient (addEventListener/send/close/readyState/binaryType) plus test
-// hooks to drive it from the outside. No network, mirrors mutator.test.ts's
-// stubbed-fetch approach.
-class MockSocket {
-  static instances: MockSocket[] = [];
-  readyState = 0; // CONNECTING
-  binaryType: 'blob' | 'arraybuffer' = 'blob';
-  sent: unknown[] = [];
-  private listeners = new Map<string, Array<(event: any) => void>>();
-
-  constructor(public url: string) {
-    MockSocket.instances.push(this);
-  }
-
-  addEventListener(type: string, listener: (event: any) => void): void {
-    const list = this.listeners.get(type) ?? [];
-    list.push(listener);
-    this.listeners.set(type, list);
-  }
-
-  send(data: unknown): void {
-    this.sent.push(data);
-  }
-
-  close(code = 1000, reason = ''): void {
-    if (this.readyState === 3) return;
-    this.readyState = 3; // CLOSED
-    this.fire('close', { code, reason });
-  }
-
-  // --- test driver helpers, not part of the real WebSocket API ---
-  open(): void {
-    this.readyState = 1; // OPEN
-    this.fire('open', {});
-  }
-
-  message(data: unknown): void {
-    this.fire('message', { data });
-  }
-
-  private fire(type: string, event: unknown): void {
-    for (const listener of this.listeners.get(type) ?? []) listener(event);
-  }
-}
-
-function lastSocket(): MockSocket {
-  return MockSocket.instances[MockSocket.instances.length - 1]!;
-}
+import { AsyncQueue, StreamClient, type StreamClientOptions, type StreamEvent } from './client';
+import { lastSocket, MockSocket, tick } from './mock-socket';
 
 const dataStreamOptions = (overrides: Partial<StreamClientOptions> = {}): StreamClientOptions => ({
   url: () => 'wss://stream.test/v2/iex',
@@ -61,44 +12,43 @@ const dataStreamOptions = (overrides: Partial<StreamClientOptions> = {}): Stream
   ...overrides,
 });
 
-test('connects, authenticates, and emits decoded messages + iterates them', async () => {
+/** Drains events from a client's async iterator until `n` have been collected, or it ends. */
+async function collect(client: AsyncIterable<StreamEvent>, n: number): Promise<StreamEvent[]> {
+  const out: StreamEvent[] = [];
+  for await (const event of client) {
+    out.push(event);
+    if (out.length >= n) break;
+  }
+  return out;
+}
+
+test('connects, authenticates, and yields decoded messages', async () => {
   MockSocket.instances = [];
   const client = new StreamClient(dataStreamOptions());
-  const opened: unknown[] = [];
-  const authed: unknown[] = [];
-  const messages: unknown[] = [];
-  client.on('open', () => opened.push(true));
-  client.on('authenticated', () => authed.push(true));
-  client.on('message', (m) => messages.push(m));
-
   client.connect();
   const socket = lastSocket();
   socket.open();
-  expect(opened).toHaveLength(1);
-  expect(JSON.parse(socket.sent[0] as string)).toEqual({ action: 'auth', key: 'KEY', secret: 'SECRET' });
-
   socket.message(JSON.stringify([{ T: 'success', msg: 'authenticated' }]));
-  expect(authed).toHaveLength(1);
-  expect(client.state).toBe('open');
-
   socket.message(JSON.stringify([{ T: 't', S: 'AAPL', p: 100.5 }]));
-  expect(messages).toEqual([{ T: 't', S: 'AAPL', p: 100.5 }]);
 
-  // The iterator drains the backlog first (the 't' message above, queued before
-  // anyone was pulling), then yields newly arriving messages as they come in.
-  const iterator = client[Symbol.asyncIterator]();
-  expect(await iterator.next()).toEqual({ value: { T: 't', S: 'AAPL', p: 100.5 }, done: false });
-  socket.message(JSON.stringify([{ T: 'q', S: 'AAPL' }]));
-  expect(await iterator.next()).toEqual({ value: { T: 'q', S: 'AAPL' }, done: false });
+  const events = await collect(client, 3);
+  expect(events).toEqual([
+    { type: 'open' },
+    { type: 'authenticated' },
+    { type: 'message', message: { T: 't', S: 'AAPL', p: 100.5 } },
+  ]);
+  expect(JSON.parse(socket.sent[0] as string)).toEqual({ action: 'auth', key: 'KEY', secret: 'SECRET' });
+  expect(client.state).toBe('open');
 });
 
-test('subscribe sends immediately and unsubscribe forgets it', () => {
+test('subscribe sends immediately and unsubscribe forgets it', async () => {
   MockSocket.instances = [];
   const client = new StreamClient(dataStreamOptions());
   client.connect();
   const socket = lastSocket();
   socket.open();
   socket.message(JSON.stringify([{ T: 'success', msg: 'authenticated' }]));
+  await collect(client, 2); // drain open + authenticated so the test below reads cleanly
 
   client.subscribe('trades', { action: 'subscribe', trades: ['AAPL'] });
   expect(JSON.parse(socket.sent.at(-1) as string)).toEqual({ action: 'subscribe', trades: ['AAPL'] });
@@ -107,75 +57,112 @@ test('subscribe sends immediately and unsubscribe forgets it', () => {
   expect(JSON.parse(socket.sent.at(-1) as string)).toEqual({ action: 'unsubscribe', trades: ['AAPL'] });
 });
 
-test('reconnects with backoff and replays tracked subscriptions, but not the unsubscribed one', () => {
+test('reconnects with backoff and replays tracked subscriptions, but not the unsubscribed one', async () => {
   MockSocket.instances = [];
-  const reconnecting: Array<{ attempt: number; delayMs: number }> = [];
   const client = new StreamClient(dataStreamOptions({ reconnect: { initialDelayMs: 1, maxDelayMs: 4, factor: 2 } }));
-  client.on('reconnecting', (e) => reconnecting.push(e));
-
   client.connect();
   let socket = lastSocket();
   socket.open();
   socket.message(JSON.stringify([{ T: 'success', msg: 'authenticated' }]));
+  await collect(client, 2);
   client.subscribe('trades', { action: 'subscribe', trades: ['AAPL'] });
   client.subscribe('quotes', { action: 'subscribe', quotes: ['MSFT'] });
   client.unsubscribe('quotes', { action: 'unsubscribe', quotes: ['MSFT'] });
 
   // Connection drops unexpectedly (not via client.close()) - should auto-reconnect.
   socket.close(1006, 'abnormal');
-  expect(reconnecting).toEqual([{ attempt: 1, delayMs: 1 }]);
+  const [reconnecting] = await collect(client, 1);
+  expect(reconnecting).toEqual({ type: 'reconnecting', attempt: 1, delayMs: 1 });
+  expect(client.state).toBe('reconnecting');
 
-  return new Promise<void>((resolve) => {
-    setTimeout(() => {
-      expect(MockSocket.instances).toHaveLength(2);
-      socket = lastSocket();
-      socket.open();
-      socket.sent = []; // clear the resent auth message
-      socket.message(JSON.stringify([{ T: 'success', msg: 'authenticated' }]));
-      const replayed = socket.sent.map((m) => JSON.parse(m as string));
-      expect(replayed).toEqual([{ action: 'subscribe', trades: ['AAPL'] }]);
-      resolve();
-    }, 5);
-  });
+  await new Promise<void>((resolve) => setTimeout(resolve, 5));
+  expect(MockSocket.instances).toHaveLength(2);
+  socket = lastSocket();
+  socket.open();
+  socket.sent = []; // clear the resent auth message
+  socket.message(JSON.stringify([{ T: 'success', msg: 'authenticated' }]));
+  await collect(client, 1); // the 'authenticated' event
+  const replayed = socket.sent.map((m) => JSON.parse(m as string));
+  expect(replayed).toEqual([{ action: 'subscribe', trades: ['AAPL'] }]);
 });
 
-test('idle timeout forces a reconnect when no frames arrive', () => {
+test('idle timeout forces a reconnect: state correctly reflects the in-flight close, not stale "open"', async () => {
   MockSocket.instances = [];
-  const errors: Error[] = [];
   const client = new StreamClient(dataStreamOptions({ idleTimeoutMs: 5, reconnect: { initialDelayMs: 1 } }));
-  client.on('error', (e) => errors.push(e));
   client.connect();
   const socket = lastSocket();
   socket.open();
 
-  return new Promise<void>((resolve) => {
-    setTimeout(() => {
-      expect(errors[0]?.message).toMatch(/idle timeout/);
-      expect(socket.readyState).toBe(3); // forced closed by the idle timer
-      resolve();
-    }, 10);
-  });
+  const [, errorEvent] = await collect(client, 2); // 'open' first, then the idle-timeout error
+  expect(errorEvent).toEqual({ type: 'error', error: expect.any(Error) as unknown as Error });
+  expect((errorEvent as { type: 'error'; error: Error }).error.message).toMatch(/idle timeout/);
+  // Regression: the idle handler used to leave `state` reporting 'open' during the async close
+  // handshake, so a subscribe()/send() call in that window threw "stream socket is not open"
+  // unexpectedly. It must never claim 'open' again once the idle-driven close has begun, and
+  // send() (which checks the socket's actual readyState, not just the label) must refuse.
+  expect(client.state).not.toBe('open');
+  expect(() => client.send({})).toThrow('stream socket is not open');
+
+  await tick(); // let the deferred close handshake land
+  expect(socket.readyState).toBe(3);
+  // It keeps trying - not stuck 'closed' - though by now the 1ms reconnect timer may already have
+  // fired too, so this could be 'reconnecting' (still waiting) or 'connecting' (already retrying).
+  expect(client.state).not.toBe('closed');
+
+  client.close(); // clean up any pending reconnect timer so it can't fire into a later test
 });
 
-test('close() is clean - no reconnect, terminal close event, async iterator ends', async () => {
+test('close() is clean - no reconnect, ends the async iterator', async () => {
   MockSocket.instances = [];
-  const closes: Array<{ code: number; reason: string }> = [];
-  const reconnects: unknown[] = [];
   const client = new StreamClient(dataStreamOptions());
-  client.on('close', (e) => closes.push(e));
-  client.on('reconnecting', (e) => reconnects.push(e));
   client.connect();
   const socket = lastSocket();
   socket.open();
 
   const iterator = client[Symbol.asyncIterator]();
-  const pending = iterator.next();
+  const pending = iterator.next(); // currently parked waiting for the next event (the 'open' one, already queued, will resolve first)
+  await pending;
+  const next = iterator.next();
   client.close(1000, 'bye');
+  expect(client.state).toBe('closing');
+  await tick();
   expect(socket.readyState).toBe(3);
-  expect(closes).toEqual([{ code: 1000, reason: 'bye' }]);
-  expect(reconnects).toHaveLength(0);
-  expect(await pending).toEqual({ value: undefined, done: true });
+  expect(await next).toEqual({ value: undefined, done: true });
   expect(MockSocket.instances).toHaveLength(1); // never reconnected
+});
+
+test('close() called while a reconnect is already scheduled ends the iterator immediately, instead of hanging', async () => {
+  MockSocket.instances = [];
+  const client = new StreamClient(dataStreamOptions({ reconnect: { initialDelayMs: 1000 } }));
+  client.connect();
+  const socket = lastSocket();
+  socket.open();
+  await collect(client, 1); // 'open'
+
+  socket.close(1006, 'abnormal'); // unexpected drop - schedules a reconnect 1000ms out
+  await collect(client, 1); // 'reconnecting'
+  expect(client.state).toBe('reconnecting');
+
+  const iterator = client[Symbol.asyncIterator]();
+  const pending = iterator.next();
+  client.close(); // regression: this used to silently no-op (state was already 'closed') and never end the queue
+  expect(await pending).toEqual({ value: undefined, done: true });
+});
+
+test("connect()'s re-entry guard covers the 'closing' state, so a stale close can't orphan a fresh connection", async () => {
+  MockSocket.instances = [];
+  const client = new StreamClient(dataStreamOptions());
+  client.connect();
+  const first = lastSocket();
+  first.open();
+  await collect(client, 1); // 'open'
+
+  client.close(); // readyState -> CLOSING synchronously; the 'close' event is still pending (microtask)
+  client.connect(); // regression: used to be allowed through and create a second socket while the first was still closing
+  expect(MockSocket.instances).toHaveLength(1); // no new socket was created - connect() correctly no-opped
+
+  await tick(); // let the first socket's close event land
+  expect(client.state).toBe('closed');
 });
 
 test('send() throws when the socket is not open', () => {
@@ -183,14 +170,24 @@ test('send() throws when the socket is not open', () => {
   expect(() => client.send({ action: 'noop' })).toThrow('stream socket is not open');
 });
 
-test('a binary frame with no decode() configured raises an error event', () => {
+test('a binary frame with no decode() configured yields an error event instead of throwing', async () => {
   MockSocket.instances = [];
-  const errors: Error[] = [];
   const client = new StreamClient(dataStreamOptions());
-  client.on('error', (e) => errors.push(e));
   client.connect();
   const socket = lastSocket();
   socket.open();
   socket.message(new ArrayBuffer(4));
-  expect(errors[0]?.message).toMatch(/binary frame received but no decode/);
+
+  const [openEvent, errorEvent] = await collect(client, 2);
+  expect(openEvent).toEqual({ type: 'open' });
+  expect((errorEvent as { type: 'error'; error: Error }).error.message).toMatch(/binary frame received but no decode/);
+});
+
+test('AsyncQueue rejects a second concurrent consumer instead of silently splitting messages between them', async () => {
+  const queue = new AsyncQueue<number>();
+  const a = queue[Symbol.asyncIterator]().next();
+  const b = queue[Symbol.asyncIterator]().next(); // a second next() while `a` is still pending
+  queue.push(1);
+  await expect(a).resolves.toEqual({ value: 1, done: false });
+  await expect(b).rejects.toThrow('AsyncQueue: next() was called concurrently by more than one consumer');
 });

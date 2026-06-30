@@ -1,90 +1,22 @@
 import { expect, test } from 'bun:test';
-import { TradingStreamClient } from './trading-client';
+import { lastSocket, MockSocket } from './mock-socket';
+import { TradingStreamClient, type TradeUpdate, type TradingStreamEvent } from './trading-client';
 
-// A minimal stand-in for the global `WebSocket`, mirroring client.test.ts's
-// MockSocket. The trading stream is binary, so `message()` here sends raw
-// msgpack bytes (built with the small encoder below) instead of JSON text.
-class MockSocket {
-  static instances: MockSocket[] = [];
-  readyState = 0;
-  binaryType: 'blob' | 'arraybuffer' = 'blob';
-  sent: unknown[] = [];
-  private listeners = new Map<string, Array<(event: any) => void>>();
-
-  constructor(public url: string) {
-    MockSocket.instances.push(this);
-  }
-
-  addEventListener(type: string, listener: (event: any) => void): void {
-    const list = this.listeners.get(type) ?? [];
-    list.push(listener);
-    this.listeners.set(type, list);
-  }
-
-  send(data: unknown): void {
-    this.sent.push(data);
-  }
-
-  close(code = 1000, reason = ''): void {
-    if (this.readyState === 3) return;
-    this.readyState = 3;
-    this.fire('close', { code, reason });
-  }
-
-  open(): void {
-    this.readyState = 1;
-    this.fire('open', {});
-  }
-
-  message(data: ArrayBuffer): void {
-    this.fire('message', { data });
-  }
-
-  private fire(type: string, event: unknown): void {
-    for (const listener of this.listeners.get(type) ?? []) listener(event);
-  }
-}
-
-function lastSocket(): MockSocket {
-  return MockSocket.instances[MockSocket.instances.length - 1]!;
-}
-
-// Tiny spec-correct msgpack encoder for the fixstr/fixmap/fixarray subset -
-// enough to build the realistic frames this test sends. Mirrors the
-// equivalent helper in msgpack.test.ts.
-const u = (...b: number[]) => Uint8Array.from(b);
-const fstr = (s: string) => {
-  const b = new TextEncoder().encode(s);
-  if (b.length >= 32) throw new Error('test helper: string too long');
-  return u(0xa0 | b.length, ...b);
+// The trading stream sends JSON as binary frames by default (see trading-client.ts's
+// module doc) - so frames here are UTF-8-encoded JSON text wrapped in an ArrayBuffer,
+// not text frames and not msgpack.
+const jsonFrame = (value: unknown): ArrayBuffer => {
+  const bytes = new TextEncoder().encode(JSON.stringify(value));
+  return bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) as ArrayBuffer;
 };
-const concat = (...arrs: Uint8Array[]) => {
-  const out = new Uint8Array(arrs.reduce((n, a) => n + a.length, 0));
-  let p = 0;
-  for (const a of arrs) {
-    out.set(a, p);
-    p += a.length;
-  }
-  return out;
-};
-const fmap = (o: Record<string, Uint8Array>) => {
-  const entries = Object.entries(o);
-  return concat(u(0x80 | entries.length), ...entries.flatMap(([k, v]) => [fstr(k), v]));
-};
-const toArrayBuffer = (bytes: Uint8Array): ArrayBuffer => bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) as ArrayBuffer;
 
 const authorizationFrame = (status: 'authorized' | 'unauthorized') =>
-  toArrayBuffer(fmap({ stream: fstr('authorization'), data: fmap({ status: fstr(status), action: fstr('authenticate') }) }));
+  jsonFrame({ stream: 'authorization', data: { status, action: 'authenticate' } });
 
-const listeningFrame = () => toArrayBuffer(fmap({ stream: fstr('listening'), data: fmap({ streams: fstr('trade_updates') }) }));
+const listeningFrame = () => jsonFrame({ stream: 'listening', data: { streams: ['trade_updates'] } });
 
 const tradeUpdateFrame = (event: string) =>
-  toArrayBuffer(
-    fmap({
-      stream: fstr('trade_updates'),
-      data: fmap({ event: fstr(event), price: fstr('100.5'), order: fmap({ id: fstr('o-1'), status: fstr('filled') }) }),
-    }),
-  );
+  jsonFrame({ stream: 'trade_updates', data: { event, price: '100.5', order: { id: 'o-1', status: 'filled' } } });
 
 function connectAndAuth(client: TradingStreamClient): MockSocket {
   client.connect();
@@ -94,26 +26,33 @@ function connectAndAuth(client: TradingStreamClient): MockSocket {
   return socket;
 }
 
-test('authenticates with key/secret, listens to trade_updates, and emits typed events', () => {
+/** Drains events from a client's async iterator until `n` have been collected, or it ends. */
+async function collect(client: TradingStreamClient, n: number): Promise<TradingStreamEvent[]> {
+  const out: TradingStreamEvent[] = [];
+  for await (const event of client) {
+    out.push(event);
+    if (out.length >= n) break;
+  }
+  return out;
+}
+
+test('authenticates with key/secret, listens to trade_updates once, and yields typed events', async () => {
   MockSocket.instances = [];
-  const events: string[] = [];
-  const client = new TradingStreamClient({
-    apiKey: 'KEY',
-    apiSecret: 'SECRET',
-    WebSocketImpl: MockSocket as unknown as typeof WebSocket,
-  });
-  client.on('authenticated', () => events.push('authenticated'));
-  client.on('trade_update', (u) => events.push(`trade_update:${u.event}`));
+  const client = new TradingStreamClient({ apiKey: 'KEY', apiSecret: 'SECRET', WebSocketImpl: MockSocket as unknown as typeof WebSocket });
 
   const socket = connectAndAuth(client);
+  const [open, authenticated] = await collect(client, 2);
+  expect(open).toEqual({ type: 'open' });
+  expect(authenticated).toEqual({ type: 'authenticated' });
   // Auth message is JSON even though the stream itself is binary.
   expect(JSON.parse(socket.sent[0] as string)).toEqual({ action: 'auth', key: 'KEY', secret: 'SECRET' });
   expect(JSON.parse(socket.sent[1] as string)).toEqual({ action: 'listen', data: { streams: ['trade_updates'] } });
-  expect(events).toEqual(['authenticated']);
+  expect(socket.sent).toHaveLength(2); // exactly one auth + one listen - no duplicate
 
   socket.message(listeningFrame()); // ack - no event surfaced
   socket.message(tradeUpdateFrame('fill'));
-  expect(events).toEqual(['authenticated', 'trade_update:fill']);
+  const [update] = await collect(client, 1);
+  expect(update).toEqual({ type: 'trade_update', update: { event: 'fill', price: '100.5', order: { id: 'o-1', status: 'filled' } } as TradeUpdate });
 });
 
 test('falls back to ALPACA_API_KEY/SECRET env vars when no options are given', () => {
@@ -132,31 +71,36 @@ test('falls back to ALPACA_API_KEY/SECRET env vars when no options are given', (
   }
 });
 
-test('unauthorized auth emits an error and never reaches the open state', () => {
+test('unauthorized auth yields an error and ends the stream instead of retrying forever with the same bad creds', async () => {
   MockSocket.instances = [];
-  const errors: Error[] = [];
   const client = new TradingStreamClient({ apiKey: 'BAD', apiSecret: 'BAD', WebSocketImpl: MockSocket as unknown as typeof WebSocket });
-  client.on('error', (e) => errors.push(e));
   client.connect();
   const socket = lastSocket();
   socket.open();
   socket.message(authorizationFrame('unauthorized'));
-  expect(errors).toHaveLength(1);
-  expect(errors[0]?.message).toMatch(/unauthorized/);
-  expect(client.state).toBe('authenticating');
+
+  const iterator = client[Symbol.asyncIterator]();
+  await iterator.next(); // 'open'
+  const errorResult = await iterator.next();
+  expect(errorResult.done).toBe(false);
+  const event = errorResult.value as Extract<TradingStreamEvent, { type: 'error' }>;
+  expect(event.type).toBe('error');
+  expect(event.error.message).toMatch(/unauthorized/);
+
+  expect(await iterator.next()).toEqual({ value: undefined, done: true }); // stream ends - no infinite retry loop
 });
 
 test('async iterates trade updates in order', async () => {
   MockSocket.instances = [];
   const client = new TradingStreamClient({ apiKey: 'KEY', apiSecret: 'SECRET', WebSocketImpl: MockSocket as unknown as typeof WebSocket });
   const socket = connectAndAuth(client);
-  const iterator = client[Symbol.asyncIterator]();
-  const pending = iterator.next();
+  await collect(client, 2); // open + authenticated
   socket.message(tradeUpdateFrame('new'));
-  expect((await pending).value?.event).toBe('new');
+  const [update] = await collect(client, 1);
+  expect((update as Extract<TradingStreamEvent, { type: 'trade_update' }>).update.event).toBe('new');
 });
 
-test('re-listens automatically after a reconnect', () => {
+test('re-listens automatically after a reconnect, exactly once (no duplicate listen)', async () => {
   MockSocket.instances = [];
   const client = new TradingStreamClient({
     apiKey: 'KEY',
@@ -165,16 +109,19 @@ test('re-listens automatically after a reconnect', () => {
     WebSocketImpl: MockSocket as unknown as typeof WebSocket,
   });
   const socket = connectAndAuth(client);
+  await collect(client, 2); // open + authenticated
 
   socket.close(1006, 'abnormal');
-  return new Promise<void>((resolve) => {
-    setTimeout(() => {
-      expect(MockSocket.instances).toHaveLength(2);
-      const next = lastSocket();
-      next.open();
-      next.message(authorizationFrame('authorized'));
-      expect(JSON.parse(next.sent.at(-1) as string)).toEqual({ action: 'listen', data: { streams: ['trade_updates'] } });
-      resolve();
-    }, 5);
-  });
+  await collect(client, 1); // 'reconnecting'
+
+  await new Promise<void>((resolve) => setTimeout(resolve, 5));
+  expect(MockSocket.instances).toHaveLength(2);
+  const next = lastSocket();
+  next.open();
+  next.message(authorizationFrame('authorized'));
+  await collect(client, 2); // open + authenticated (on the new connection)
+  expect(next.sent.map((m) => JSON.parse(m as string))).toEqual([
+    { action: 'auth', key: 'KEY', secret: 'SECRET' },
+    { action: 'listen', data: { streams: ['trade_updates'] } },
+  ]);
 });

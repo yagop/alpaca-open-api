@@ -1,51 +1,6 @@
 import { expect, test } from 'bun:test';
-import { cryptoDataStream, newsDataStream, optionDataStream, stockDataStream } from './market-data-client';
-
-// Same MockSocket shape as client.test.ts/trading-client.test.ts - no network.
-class MockSocket {
-  static instances: MockSocket[] = [];
-  readyState = 0;
-  binaryType: 'blob' | 'arraybuffer' = 'blob';
-  sent: unknown[] = [];
-  private listeners = new Map<string, Array<(event: any) => void>>();
-
-  constructor(public url: string) {
-    MockSocket.instances.push(this);
-  }
-
-  addEventListener(type: string, listener: (event: any) => void): void {
-    const list = this.listeners.get(type) ?? [];
-    list.push(listener);
-    this.listeners.set(type, list);
-  }
-
-  send(data: unknown): void {
-    this.sent.push(data);
-  }
-
-  close(code = 1000, reason = ''): void {
-    if (this.readyState === 3) return;
-    this.readyState = 3;
-    this.fire('close', { code, reason });
-  }
-
-  open(): void {
-    this.readyState = 1;
-    this.fire('open', {});
-  }
-
-  message(data: unknown): void {
-    this.fire('message', { data });
-  }
-
-  private fire(type: string, event: unknown): void {
-    for (const listener of this.listeners.get(type) ?? []) listener(event);
-  }
-}
-
-function lastSocket(): MockSocket {
-  return MockSocket.instances[MockSocket.instances.length - 1]!;
-}
+import { cryptoDataStream, type MarketDataStreamEvent, newsDataStream, optionDataStream, type StockMessage, stockDataStream } from './market-data-client';
+import { lastSocket, MockSocket } from './mock-socket';
 
 const json = (sent: unknown) => JSON.parse(sent as string);
 
@@ -58,24 +13,32 @@ function connectAndAuth(socketFactory: () => void): MockSocket {
   return socket;
 }
 
-test('stock stream: connects to the iex feed by default, authenticates, ignores the "connected" greeting', () => {
-  MockSocket.instances = [];
-  const events: string[] = [];
-  const client = stockDataStream({ apiKey: 'KEY', apiSecret: 'SECRET', WebSocketImpl: MockSocket as unknown as typeof WebSocket });
-  client.on('open', () => events.push('open'));
-  client.on('authenticated', () => events.push('authenticated'));
-  client.on('message', () => events.push('message'));
+/** Drains events from a client's async iterator until `n` have been collected, or it ends. */
+async function collect<T>(client: AsyncIterable<MarketDataStreamEvent<T>>, n: number): Promise<MarketDataStreamEvent<T>[]> {
+  const out: MarketDataStreamEvent<T>[] = [];
+  for await (const event of client) {
+    out.push(event);
+    if (out.length >= n) break;
+  }
+  return out;
+}
 
+test('stock stream: connects to the iex feed by default, authenticates, ignores the "connected" greeting', async () => {
+  MockSocket.instances = [];
+  const client = stockDataStream({ apiKey: 'KEY', apiSecret: 'SECRET', WebSocketImpl: MockSocket as unknown as typeof WebSocket });
   const socket = connectAndAuth(() => client.connect());
   expect(socket.url).toBe('wss://stream.data.alpaca.markets/v2/iex');
   expect(json(socket.sent[0])).toEqual({ action: 'auth', key: 'KEY', secret: 'SECRET' });
-  expect(events).toEqual(['open', 'authenticated']); // the "connected" greeting produced no event
+
+  const events = await collect(client, 2); // the "connected" greeting produced no event of its own
+  expect(events).toEqual([{ type: 'open' }, { type: 'authenticated' }]);
 });
 
-test('subscribe sends immediately, merges across calls, and replays the merged state on reconnect', () => {
+test('subscribe sends only the incremental channels, merges across calls, and replays the merged state on reconnect', async () => {
   MockSocket.instances = [];
   const client = stockDataStream({ reconnect: { initialDelayMs: 1 }, WebSocketImpl: MockSocket as unknown as typeof WebSocket });
   let socket = connectAndAuth(() => client.connect());
+  await collect(client, 2); // open + authenticated
 
   client.subscribe({ trades: ['AAPL'] });
   client.subscribe({ quotes: ['MSFT'] });
@@ -83,48 +46,64 @@ test('subscribe sends immediately, merges across calls, and replays the merged s
 
   client.unsubscribe({ trades: ['AAPL'] });
   expect(json(socket.sent.at(-1))).toEqual({ action: 'unsubscribe', trades: ['AAPL'] });
+  // auth, subscribe(trades), subscribe(quotes), unsubscribe(trades) - one send per call, never duplicated.
+  expect(socket.sent).toHaveLength(4);
 
   socket.close(1006, 'abnormal');
-  return new Promise<void>((resolve) => {
-    setTimeout(() => {
-      expect(MockSocket.instances).toHaveLength(2);
-      socket = lastSocket();
-      socket.open();
-      socket.message(JSON.stringify([{ T: 'success', msg: 'connected' }]));
-      socket.message(JSON.stringify([{ T: 'success', msg: 'authenticated' }]));
-      // Only the still-desired 'quotes' subscription is replayed - 'trades' was unsubscribed.
-      expect(json(socket.sent.at(-1))).toEqual({ action: 'subscribe', quotes: ['MSFT'] });
-      resolve();
-    }, 5);
-  });
+  await collect(client, 1); // 'reconnecting'
+
+  await new Promise<void>((resolve) => setTimeout(resolve, 5));
+  expect(MockSocket.instances).toHaveLength(2);
+  socket = lastSocket();
+  socket.open();
+  socket.message(JSON.stringify([{ T: 'success', msg: 'connected' }]));
+  socket.message(JSON.stringify([{ T: 'success', msg: 'authenticated' }]));
+  await collect(client, 2); // open + authenticated, on the new connection
+  // Only the still-desired 'quotes' subscription is replayed - 'trades' was unsubscribed - and it's
+  // the one merged auto-replay send (auth + one subscribe), not also re-sent by subscribe()/unsubscribe().
+  expect(socket.sent).toHaveLength(2);
+  expect(json(socket.sent.at(-1))).toEqual({ action: 'subscribe', quotes: ['MSFT'] });
 });
 
-test('typed trade/quote/bar messages are emitted and iterable; subscription acks and stream errors are surfaced separately', async () => {
+test('unsubscribing everything stops replaying on the next reconnect', async () => {
   MockSocket.instances = [];
-  const messages: unknown[] = [];
-  const acks: unknown[] = [];
-  const errors: Error[] = [];
+  const client = stockDataStream({ reconnect: { initialDelayMs: 1 }, WebSocketImpl: MockSocket as unknown as typeof WebSocket });
+  let socket = connectAndAuth(() => client.connect());
+  await collect(client, 2);
+
+  client.subscribe({ trades: ['AAPL'] });
+  client.unsubscribe({ trades: ['AAPL'] });
+
+  socket.close(1006, 'abnormal');
+  await collect(client, 1); // 'reconnecting'
+  await new Promise<void>((resolve) => setTimeout(resolve, 5));
+  socket = lastSocket();
+  socket.open();
+  socket.message(JSON.stringify([{ T: 'success', msg: 'connected' }]));
+  socket.message(JSON.stringify([{ T: 'success', msg: 'authenticated' }]));
+  await collect(client, 2);
+  // Only the auth message - nothing left to replay.
+  expect(socket.sent).toHaveLength(1);
+});
+
+test('typed trade/quote/bar messages are yielded and iterable; subscription acks and stream errors are separate event types', async () => {
+  MockSocket.instances = [];
   const client = stockDataStream({ WebSocketImpl: MockSocket as unknown as typeof WebSocket });
-  client.on('message', (m) => messages.push(m));
-  client.on('subscription', (a) => acks.push(a));
-  client.on('error', (e) => errors.push(e));
   const socket = connectAndAuth(() => client.connect());
+  await collect(client, 2); // open + authenticated
 
   socket.message(JSON.stringify([{ T: 'subscription', trades: ['AAPL'] }]));
   socket.message(JSON.stringify([{ T: 't', S: 'AAPL', p: 150.25, s: 100, t: '2024-01-01T00:00:00Z', c: [], i: 1, x: 'V', z: 'A' }]));
   socket.message(JSON.stringify([{ T: 'error', code: 405, msg: 'symbol limit exceeded' }]));
 
-  expect(acks).toEqual([{ T: 'subscription', trades: ['AAPL'] }]);
-  expect(messages).toHaveLength(1);
-  expect((messages[0] as { S: string }).S).toBe('AAPL');
-  expect(errors[0]?.message).toBe('market data stream: symbol limit exceeded (code 405)');
+  const [ack, message, error] = await collect(client, 3);
+  expect(ack).toEqual({ type: 'subscription', ack: { T: 'subscription', trades: ['AAPL'] } });
+  expect((message as Extract<MarketDataStreamEvent<StockMessage>, { type: 'message' }>).message.S).toBe('AAPL');
+  expect((error as Extract<MarketDataStreamEvent<StockMessage>, { type: 'error' }>).error.message).toBe('market data stream: symbol limit exceeded (code 405)');
 
-  // The iterator drains the backlog first (the 't' message above, queued before anyone
-  // was pulling), then yields newly arriving messages as they come in.
-  const iterator = client[Symbol.asyncIterator]();
-  expect((await iterator.next()).value).toMatchObject({ T: 't', S: 'AAPL' });
   socket.message(JSON.stringify([{ T: 'q', S: 'AAPL', bp: 150, bs: 1, ax: 'V', ap: 150.5, as: 1, bx: 'V', c: [], t: '2024-01-01T00:00:00Z', z: 'A' }]));
-  expect((await iterator.next()).value).toMatchObject({ T: 'q', S: 'AAPL' });
+  const [quote] = await collect(client, 1);
+  expect((quote as Extract<MarketDataStreamEvent<StockMessage>, { type: 'message' }>).message).toMatchObject({ T: 'q', S: 'AAPL' });
 });
 
 test('crypto/option/news factories target the right hosts', () => {
