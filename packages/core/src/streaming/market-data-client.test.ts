@@ -164,11 +164,17 @@ test('typed crypto orderbook events flow through as plain messages', async () =>
   const socket = connectAndAuth(() => client.connect());
   await collect(client, 2);
 
-  const orderbook: CryptoOrderbookMessage = { T: 'o', S: 'BTC/USD', t: '2024-03-12T10:38:50.79613221Z', b: [{ p: 71859.53, s: 0.27994 }], a: [{ p: 71939.7, s: 0.83953 }], r: true };
-  socket.message(JSON.stringify([orderbook]));
+  const snapshot: CryptoOrderbookMessage = { T: 'o', S: 'BTC/USD', t: '2024-03-12T10:38:50.79613221Z', b: [{ p: 71859.53, s: 0.27994 }], a: [{ p: 71939.7, s: 0.83953 }], r: true };
+  socket.message(JSON.stringify([snapshot]));
+  const [snapshotEvent] = await collect(client, 1);
+  expect((snapshotEvent as Extract<MarketDataStreamEvent<CryptoMessage>, { type: 'message' }>).message).toEqual(snapshot);
 
-  const [event] = await collect(client, 1);
-  expect((event as Extract<MarketDataStreamEvent<CryptoMessage>, { type: 'message' }>).message).toEqual(orderbook);
+  // Regression: confirmed live that `r` is only present on the initial snapshot - every
+  // subsequent incremental update (a single bid or ask level change) omits it entirely.
+  const delta: CryptoOrderbookMessage = { T: 'o', S: 'BTC/USD', t: '2024-03-12T10:38:51.1Z', b: [{ p: 71850, s: 0 }], a: [] };
+  socket.message(JSON.stringify([delta]));
+  const [deltaEvent] = await collect(client, 1);
+  expect((deltaEvent as Extract<MarketDataStreamEvent<CryptoMessage>, { type: 'message' }>).message).toEqual(delta);
 });
 
 test('authenticates over the option feed using real MessagePack both ways (unlike stocks/crypto/news, which are JSON)', async () => {

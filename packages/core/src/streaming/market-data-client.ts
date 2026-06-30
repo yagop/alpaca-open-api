@@ -92,8 +92,13 @@ export interface StockCancelErrorMessage {
   z?: string;
 }
 
-/** A crypto orderbook snapshot/update - REST `CryptoOrderbook` shape plus the streaming envelope. */
-export type CryptoOrderbookMessage = CryptoOrderbook & { T: 'o'; S: string; r: boolean };
+/**
+ * A crypto orderbook snapshot/update - REST `CryptoOrderbook` shape plus the streaming envelope.
+ * `r` (full-reset/snapshot flag) is only actually present on the initial snapshot - confirmed
+ * live: every subsequent incremental update (a single bid/ask level change, `b`/`a` otherwise
+ * empty) omits it entirely, despite Alpaca's own docs example showing it as always-present.
+ */
+export type CryptoOrderbookMessage = CryptoOrderbook & { T: 'o'; S: string; r?: boolean };
 
 /** A stock trade/quote/bar/status/LULD/correction/cancel-error event - REST model shape (where one exists) plus the streaming envelope (`T`, `S`). */
 export type StockMessage =
