@@ -17,6 +17,14 @@
   "files": [
     "dist"
   ],
+  "peerDependencies": {
+    "@types/node": ">=22"
+  },
+  "peerDependenciesMeta": {
+    "@types/node": {
+      "optional": true
+    }
+  },
   "scripts": {
     "build": "bun build src/index.ts --outfile dist/index.js --target node --format esm && tsc -p tsconfig.build.json && bun scripts/fix-dts-extensions.ts && tsc -p tsconfig.dts-check.json",
     "prepublishOnly": "npm run build"

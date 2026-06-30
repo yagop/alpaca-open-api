@@ -28,3 +28,24 @@ export * as tradingModel from './generated/trading/model';
 export * as dataModel from './generated/data/model';
 export * as brokerModel from './generated/broker/model';
 export * as authxModel from './generated/authx/model';
+
+// Hand-written WebSocket streaming clients - streaming isn't in the OpenAPI specs,
+// so (like the mutator) there's nothing to generate. See the README's Streaming
+// section for usage. `StreamClient` is the shared connect/auth/reconnect engine;
+// `TradingStreamClient` and the `*DataStream` factories are the typed, ready-to-use
+// clients built on it.
+export { StreamClient } from './streaming/client';
+export type { ReconnectOptions, StreamClientEvents, StreamClientOptions, StreamClientState } from './streaming/client';
+export { TradingStreamClient } from './streaming/trading-client';
+export type { TradeUpdate, TradeUpdateEvent, TradingStreamEvents, TradingStreamOptions } from './streaming/trading-client';
+export { cryptoDataStream, MarketDataStreamClient, newsDataStream, optionDataStream, stockDataStream } from './streaming/market-data-client';
+export type {
+  CryptoMessage,
+  MarketDataStreamEvents,
+  MarketDataStreamOptions,
+  NewsMessage,
+  OptionMessage,
+  StockMessage,
+  SubscriptionAck,
+} from './streaming/market-data-client';
+export type { OptionFeed, StockFeed } from './streaming/routes';

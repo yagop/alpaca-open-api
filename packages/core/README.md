@@ -10,6 +10,7 @@
 - ⚡ Fully typed request/response types straight from the specs.
 - 🛰️ One namespace per API: `tradingApi`, `dataApi`, `brokerApi`, `authxApi`.
 - 🔒 Every call routes through one small shared mutator that resolves host + auth per API.
+- 📡 Real-time WebSocket streaming: trade updates, plus stock/crypto/option/news market data.
 
 ## Install
 
@@ -39,6 +40,31 @@ type Account = tradingModel.Account;
 ```
 
 Client namespaces: `tradingApi`, `dataApi`, `brokerApi`, `authxApi`; matching model (schema) types: `tradingModel`, `dataModel`, `brokerModel`, `authxModel`. `makeMutator` and `API_ROUTING` are also exported if you need to customize routing.
+
+## Streaming
+
+Real-time data over WebSocket - hand-written (streaming isn't part of the OpenAPI specs), living alongside the generated REST clients. Same credentials as above (`ALPACA_API_KEY`/`ALPACA_API_SECRET`, `ALPACA_ENV`):
+
+```ts
+import { TradingStreamClient, stockDataStream } from '@alpaca-open-api/core';
+
+// Order lifecycle events for your account.
+const trading = new TradingStreamClient();
+trading.on('trade_update', (u) => console.log(u.event, u.order.symbol, u.price));
+trading.connect();
+
+// Real-time stock trades/quotes/bars (feed defaults to 'iex').
+const stocks = stockDataStream();
+stocks.on('authenticated', () => stocks.subscribe({ trades: ['AAPL'], quotes: ['AAPL'] }));
+stocks.connect();
+for await (const message of stocks) {
+  if (message.T === 't') console.log('trade', message.S, message.p);
+}
+```
+
+`cryptoDataStream()`, `optionDataStream()`, `newsDataStream()` are the same shape for the other feeds. Every client is both an `EventEmitter` (`open`, `authenticated`, `message`/`trade_update`, `error`, `close`, `reconnecting`) and an `AsyncIterable` over its typed messages - use whichever fits. Connections auto-reconnect with backoff and re-subscribe automatically; call `.close()` to stop for good.
+
+**Design decisions:** the native global `WebSocket` (Bun + Node ≥22 - no dependency, hence this package's `engines.node: >=22`); a small hand-rolled MessagePack **decoder** for the trading stream's binary `trade_updates` frames (decode-only, no dependency - encoding isn't needed since `auth`/`listen`/`subscribe` are JSON); `EventEmitter` plus async-iterator as the consumer API, matching the rest of the package's typed-but-unopinionated style.
 
 ## Configuration
 
