@@ -3,7 +3,8 @@
  * Dependency-free by design (project policy: native/minimal over a new dep).
  *
  * The decoder reads everything Alpaca sends (maps, arrays, strings, ints,
- * floats, bool, nil, bin and the timestamp extension). The encoder only needs
+ * floats, bool, nil, bin and the timestamp extension, which it renders as an
+ * RFC3339 nanosecond string to match the JSON streams). The encoder only needs
  * to produce the simple flat `{action, ...}` shapes used for `auth`/`listen`/
  * `subscribe`/`unsubscribe` - nil, bool, string (any length), array, plain
  * object (map with string keys), and number (always as float64 - these
@@ -230,29 +231,40 @@ class Decoder {
     return { type, data };
   }
 
-  /** Timestamp extension (-1): 4-byte secs, 8-byte ns|secs, or 12-byte ns + secs. Returns a Date. */
-  private timestamp(len: number): Date {
+  /**
+   * Timestamp extension (-1): 4-byte secs, 8-byte ns|secs, or 12-byte ns + secs. Returns an
+   * RFC3339 string with nanosecond precision - matching what Alpaca's JSON streams put in the same
+   * `t` fields (and the generated `Timestamp = string` REST type), so a consumer sees one uniform
+   * representation across every stream. Confirmed live: the option data stream sends every `t` as
+   * an 8-byte timestamp extension; decoding it to a `Date` (as this did originally) both mistyped
+   * the field and truncated its nanoseconds to milliseconds.
+   */
+  private timestamp(len: number): string {
+    let secs: number;
+    let nanos: number;
     if (len === 4) {
-      const secs = this.u32();
-      return new Date(secs * 1000);
-    }
-    if (len === 8) {
+      secs = this.u32();
+      nanos = 0;
+    } else if (len === 8) {
       // Spec: data64 = (nanoseconds << 34) | seconds (30-bit nanoseconds, 34-bit seconds), big-endian.
       // So the FIRST (more-significant) word holds nanoseconds in its top 30 bits plus the top 2 bits
       // of seconds; the SECOND word holds the low 32 bits of seconds.
       const high = this.view.getUint32(this.pos);
       const low = this.view.getUint32(this.pos + 4);
       this.pos += 8;
-      const nanos = high >>> 2;
-      const secs = (high & 0x3) * 2 ** 32 + low;
-      return new Date(secs * 1000 + Math.floor(nanos / 1e6));
+      nanos = high >>> 2;
+      secs = (high & 0x3) * 2 ** 32 + low;
+    } else if (len === 12) {
+      nanos = this.u32();
+      secs = Number(this.i64());
+    } else {
+      throw new Error(`msgpack: bad timestamp length ${len}`);
     }
-    if (len === 12) {
-      const nanos = this.u32();
-      const secs = Number(this.i64());
-      return new Date(secs * 1000 + Math.floor(nanos / 1e6));
-    }
-    throw new Error(`msgpack: bad timestamp length ${len}`);
+    // Whole seconds via Date (exact - Date holds ms and secs*1000 has none), nanoseconds spliced in
+    // as a trailing fraction so the full precision survives (RFC3339 allows any fractional width).
+    const whole = new Date(secs * 1000).toISOString().slice(0, 19); // "YYYY-MM-DDTHH:MM:SS"
+    const frac = nanos === 0 ? '' : `.${String(nanos).padStart(9, '0').replace(/0+$/, '')}`;
+    return `${whole}${frac}Z`;
   }
 }
 

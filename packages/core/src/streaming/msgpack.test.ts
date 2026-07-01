@@ -36,21 +36,33 @@ test('fixarray and fixmap', () => {
   expect(decode(u(0x81, 0xa1, 0x61, 0x01))).toEqual({ a: 1 }); // {"a":1}
 });
 
-test('timestamp extension (-1) decodes to a Date - all three encodings', () => {
-  // fixext4 (0xd6), type -1 (0xff), uint32 seconds = 1
-  expect(decode(u(0xd6, 0xff, 0x00, 0x00, 0x00, 0x01))).toEqual(new Date(1000));
+test('timestamp extension (-1) decodes to an RFC3339 string - all three encodings', () => {
+  // Decoded as a string (not a Date), to match Alpaca's JSON streams and the `Timestamp = string`
+  // REST type - confirmed live that the option data stream sends `t` as an 8-byte timestamp ext.
+
+  // fixext4 (0xd6), type -1 (0xff), uint32 seconds = 1 -> whole second, no fractional part.
+  expect(decode(u(0xd6, 0xff, 0x00, 0x00, 0x00, 0x01))).toBe('1970-01-01T00:00:01Z');
 
   // fixext8 (0xd7), type -1, data64 = (nanoseconds << 34) | seconds for
-  // nanoseconds=500_000_000, seconds=1_700_000_000 -> 2023-11-14T22:13:20.500Z.
+  // nanoseconds=500_000_000, seconds=1_700_000_000 -> 2023-11-14T22:13:20.5Z.
   // Regression test: an earlier version of timestamp(8) read the big-endian
   // word pair backwards, decoding this to a date roughly a decade off.
-  expect(decode(u(0xd7, 0xff, 0x77, 0x35, 0x94, 0x00, 0x65, 0x53, 0xf1, 0x00))).toEqual(new Date('2023-11-14T22:13:20.500Z'));
+  expect(decode(u(0xd7, 0xff, 0x77, 0x35, 0x94, 0x00, 0x65, 0x53, 0xf1, 0x00))).toBe('2023-11-14T22:13:20.5Z');
 
   // ext8 (0xc7), length 12, type -1: 4-byte nanoseconds (250_000_000) + 8-byte seconds (1_700_000_000)
-  // -> 2023-11-14T22:13:20.250Z.
-  expect(decode(u(0xc7, 0x0c, 0xff, 0x0e, 0xe6, 0xb2, 0x80, 0x00, 0x00, 0x00, 0x00, 0x65, 0x53, 0xf1, 0x00))).toEqual(
-    new Date('2023-11-14T22:13:20.250Z'),
-  );
+  // -> 2023-11-14T22:13:20.25Z.
+  expect(decode(u(0xc7, 0x0c, 0xff, 0x0e, 0xe6, 0xb2, 0x80, 0x00, 0x00, 0x00, 0x00, 0x65, 0x53, 0xf1, 0x00))).toBe('2023-11-14T22:13:20.25Z');
+});
+
+test('timestamp extension preserves full nanosecond precision (a Date would truncate it to ms)', () => {
+  // fixext8 for secs=1_700_000_000, nanos=123_456_789 (deliberately not ms-round).
+  const secs = 1_700_000_000n;
+  const nanos = 123_456_789n;
+  const buf = new Uint8Array(10);
+  buf[0] = 0xd7;
+  buf[1] = 0xff;
+  new DataView(buf.buffer).setBigUint64(2, (nanos << 34n) | secs); // spec: data64 = (nanoseconds << 34) | seconds
+  expect(decode(buf)).toBe('2023-11-14T22:13:20.123456789Z');
 });
 
 test('bin decodes to bytes; unknown ext keeps {type,data}', () => {
