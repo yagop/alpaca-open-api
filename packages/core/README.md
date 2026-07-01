@@ -10,6 +10,7 @@
 - ⚡ Fully typed request/response types straight from the specs.
 - 🛰️ One namespace per API: `tradingApi`, `dataApi`, `brokerApi`, `authxApi`.
 - 🔒 Every call routes through one small shared mutator that resolves host + auth per API.
+- 📡 Real-time WebSocket streaming: trade updates, plus stock/crypto/option/news market data.
 
 ## Install
 
@@ -39,6 +40,35 @@ type Account = tradingModel.Account;
 ```
 
 Client namespaces: `tradingApi`, `dataApi`, `brokerApi`, `authxApi`; matching model (schema) types: `tradingModel`, `dataModel`, `brokerModel`, `authxModel`. `makeMutator` and `API_ROUTING` are also exported if you need to customize routing.
+
+## Streaming
+
+Real-time data over WebSocket - hand-written (streaming isn't part of the OpenAPI specs), living alongside the generated REST clients. Same credentials as above (`ALPACA_API_KEY`/`ALPACA_API_SECRET`, `ALPACA_ENV`):
+
+```ts
+import { TradingStreamClient, stockDataStream } from '@alpaca-open-api/core';
+
+// Order lifecycle events for your account.
+const trading = new TradingStreamClient();
+trading.connect();
+for await (const event of trading) {
+  if (event.type === 'trade_update') console.log(event.update.event, event.update.order.symbol, event.update.price);
+}
+
+// Real-time stock trades/quotes/bars (feed defaults to 'iex').
+const stocks = stockDataStream();
+stocks.subscribe({ trades: ['AAPL'], quotes: ['AAPL'] }); // sent once authenticated; re-sent after any reconnect
+stocks.connect();
+for await (const event of stocks) {
+  if (event.type === 'message' && event.message.T === 't') console.log('trade', event.message.S, event.message.p);
+}
+```
+
+`cryptoDataStream()`, `optionDataStream()`, `newsDataStream()` are the same shape for the other feeds. Every client is a plain `AsyncIterable` over a typed `{type: ...}` event union (`open`, `authenticated`, `message`/`trade_update`, `error`, `reconnecting`, plus `subscription` for market data) - no `EventEmitter`, so there's no listener to forget to attach; an event you don't care about is just a `case` you don't switch on. Connections auto-reconnect with backoff and re-subscribe automatically; call `.close()` to stop for good, which ends the loop (`done: true`).
+
+All five WebSocket connections (trading, plus the four market-data feeds) are verified against the real paper API, not just mocked tests - each has its own quirk: the trading stream and the **option** data stream send/expect binary-opcode frames by default (everything else uses text); the option stream additionally requires real MessagePack in *both* directions (`{T:"error",code:400,msg:"invalid syntax"}` for a JSON auth message) - `optionDataStream()` wires up `./streaming/msgpack`'s encoder/decoder for you.
+
+**Design decisions:** the native global `WebSocket` (Bun + Node ≥22 - no dependency, hence this package's `engines.node: >=22`); JSON as the default codec everywhere except the option stream, decoded transparently whether a frame arrives as text or binary opcode (Alpaca's optional MessagePack codec elsewhere needs a `Content-Type` request header the standard `WebSocket` API can't set, so it's otherwise unreachable); a small hand-rolled MessagePack **codec** (`./streaming/msgpack`, no dependency, also exported as `decodeMsgPack`/`encodeMsgPack`) for the option stream and anyone overriding `encode`/`decode` themselves; the consumer API is `AsyncIterable` only, deliberately not `EventEmitter` - Node's `EventEmitter` throws (crashing the process) on an unhandled `'error'` event, which is exactly the kind of mistake a streaming client shouldn't be able to turn into a crash.
 
 ## Configuration
 

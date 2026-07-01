@@ -13,11 +13,11 @@
     },
     "packages/core": {
       "name": "@alpaca-open-api/core",
-      "version": "0.1.0",
+      "version": "1.0.1",
     },
     "packages/mcp": {
       "name": "@alpaca-open-api/mcp",
-      "version": "0.1.0",
+      "version": "1.0.1",
       "bin": {
         "alpaca-mcp": "./dist/mcp.js",
       },

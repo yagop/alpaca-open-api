@@ -28,3 +28,35 @@ export * as tradingModel from './generated/trading/model';
 export * as dataModel from './generated/data/model';
 export * as brokerModel from './generated/broker/model';
 export * as authxModel from './generated/authx/model';
+
+// Hand-written WebSocket streaming clients - streaming isn't in the OpenAPI specs,
+// so (like the mutator) there's nothing to generate. See the README's Streaming
+// section for usage. `StreamClient` is the shared connect/auth/reconnect engine;
+// `TradingStreamClient` and the `*DataStream` factories are the typed, ready-to-use
+// clients built on it. Each is a plain `AsyncIterable` - no `EventEmitter` - so
+// there's no event to forget to listen for; `for await` is the only consumer API.
+export { AsyncQueue, StreamClient } from './streaming/client';
+export type { ReconnectOptions, StreamClientOptions, StreamClientState, StreamEvent } from './streaming/client';
+export { TradingStreamClient } from './streaming/trading-client';
+export type { TradeUpdate, TradeUpdateEvent, TradingStreamEvent, TradingStreamOptions } from './streaming/trading-client';
+export { cryptoDataStream, MarketDataStreamClient, newsDataStream, optionDataStream, stockDataStream } from './streaming/market-data-client';
+export type {
+  CryptoMessage,
+  CryptoOrderbookMessage,
+  MarketDataStreamEvent,
+  MarketDataStreamOptions,
+  NewsMessage,
+  OptionMessage,
+  StockCancelErrorMessage,
+  StockCorrectionMessage,
+  StockLuldMessage,
+  StockMessage,
+  StockStatusMessage,
+  SubscriptionAck,
+} from './streaming/market-data-client';
+export type { OptionFeed, StockFeed } from './streaming/routes';
+// `optionDataStream()` already wires these up by default (the option feed requires real
+// MessagePack both ways - see market-data-client.ts's module doc). Exported so
+// `TradingStreamOptions`/`MarketDataStreamOptions`' `encode`/`decode` can opt into the same
+// codec elsewhere, e.g. if a transport negotiates `Content-Type: application/msgpack`.
+export { decode as decodeMsgPack, encode as encodeMsgPack } from './streaming/msgpack';
