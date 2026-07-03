@@ -15,10 +15,7 @@
  *
  * The earlier query+body arg-order quirk (and optional bodies typed as required)
  * was fixed upstream in `@orval/mcp` (orval PR #3600), released in orval 8.18.0,
- * so no post-gen swap is needed. Likewise, form-encoded request bodies get a real
- * `<Op>Body` Zod schema since orval 8.20.0 (orval issue #3664), so the permissive
- * `z.record` fallback (and its cast) for `issueTokens` is gone - every op with
- * args must have generated Zod, enforced below.
+ * so no post-gen swap is needed.
  */
 
 import {

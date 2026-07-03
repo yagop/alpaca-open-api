@@ -112,10 +112,9 @@ test('rejects arguments that fail the generated Zod schema', async () => {
 });
 
 test('issueTokens rejects a non-conforming body via its generated form-body schema', async () => {
-  // Since orval 8.20.0 the form-encoded issueTokens body has a real generated
-  // Zod schema (IssueTokensBody) instead of a permissive z.record fallback.
-  // `grant_type: 'password'` is a string - the old fallback accepted it - but
-  // fails the generated enum, proving the precise schema is enforced.
+  // issueTokens has a form-encoded body; `grant_type: 'password'` is a string
+  // (a permissive record would accept it) but fails the generated enum, proving
+  // the precise IssueTokensBody schema is enforced.
   const client = await connect(['authx']);
   let rejected = false;
   try {
