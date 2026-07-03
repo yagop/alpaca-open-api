@@ -251,6 +251,10 @@ A post-step (`packages/mcp/scripts/postgen.ts`) injects the mutator import, remo
 - `bun run build` — bundle `src/mcp.ts` → `dist/mcp.js` (shebang + `node` target; SDK and zod external)
 - `bun run start` / `bun run dev` — run the server (with `--watch` for `dev`)
 
+### 🚀 Releasing
+
+Releases are cut with the `/release [version]` Claude Code skill ([.claude/skills/release](.claude/skills/release/SKILL.md)): it drafts a GitHub Release with a changelog since the last tag, opens a version-bump PR, waits for you to merge it, tags `main` (which triggers the [release workflow](.github/workflows/release.yml) to publish both packages to npm), and finalizes the Release.
+
 ---
 
 ## 📂 Examples
