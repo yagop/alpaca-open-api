@@ -29,3 +29,25 @@ Check these before doing anything; stop with a clear message if one fails:
    If none exists, treat the range below as the full history and require an explicit `[version]`.
 5. The chosen version must be **greater than** the last released version and must not already
    exist as a tag or on npm (`npm view "@alpaca-open-api/core@<version>" version`).
+
+## 1. Changelog & draft Release
+
+1. Collect the commits since the last release:
+   ```
+   git log $LAST..origin/main --no-merges --format='%h %s'
+   ```
+   (Full history if there is no previous tag.) If the range is empty, tell the user there is
+   nothing to release and stop.
+2. Write a changelog in markdown from those commits: group into sections like **Features**,
+   **Fixes**, **Docs/CI/Chores** based on the subjects (conventional-commit prefixes when
+   present, judgement otherwise). Reference PR numbers (`(#N)`) that appear in the subjects.
+   Keep it human-readable — summarize, don't just dump `git log`.
+3. Create a **draft** GitHub Release now, **without creating the tag** (the tag only comes
+   after the version-bump PR is merged):
+   ```
+   gh release create v<version> --draft --title "v<version>" --notes-file <changelog-file>
+   ```
+   `--draft` does not create the git tag — the tag is only created when the Release is
+   published, and we'll instead push the tag ourselves later so the existing draft simply
+   attaches to it.
+4. Note the draft Release URL for the final step.
