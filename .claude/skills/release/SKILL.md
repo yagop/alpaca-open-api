@@ -51,3 +51,37 @@ Check these before doing anything; stop with a clear message if one fails:
    published, and we'll instead push the tag ourselves later so the existing draft simply
    attaches to it.
 4. Note the draft Release URL for the final step.
+
+## 2. Version-bump PR
+
+Do the bump in an **isolated worktree** so the user's checkout is untouched:
+
+1. ```
+   ROOT="$(git rev-parse --show-toplevel)"
+   WT="$(dirname "$ROOT")/$(basename "$ROOT")-release-<version>"
+   git worktree add "$WT" -b release-v<version> origin/main
+   ```
+2. In `$WT`, set `"version": "<version>"` in **all three** `package.json` files — the root,
+   `packages/core/package.json`, and `packages/mcp/package.json`. The release workflow fails
+   if the tag doesn't match both package versions, so don't skip any.
+3. Sanity-check: `cd "$WT" && bun install && bun test` (per repo convention; skip only if the
+   user asked for a fast release).
+4. Commit and push:
+   ```
+   git add package.json packages/*/package.json
+   git commit -m "chore(release): bump version to <version>"
+   git push -u origin release-v<version>
+   ```
+5. Open the PR:
+   ```
+   gh pr create --base main --head release-v<version> \
+     --title "chore(release): v<version>" \
+     --body "Version bump for the v<version> release. Part of the /release flow — tag and npm publish follow after merge."
+   ```
+6. **Wait until the PR is merged** — merging is the user's call, never merge it yourself.
+   Poll `gh pr view <PR> --json state,mergedAt` on a relaxed interval (e.g. every 60s, bounded
+   to ~30 min). If it's still open at the bound, tell the user you're waiting on their merge
+   (with the PR URL) and stop — the flow can be resumed by re-running `/release <version>`,
+   which should detect the already-bumped versions and continue from the tagging step.
+   If the PR is **closed without merging**, abort and report.
+7. After merge, clean up: `git worktree remove "$WT"` and delete the local branch.
