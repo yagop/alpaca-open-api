@@ -30,6 +30,17 @@ async function connect(enabledToolsets?: string[]): Promise<Client> {
   return client;
 }
 
+// The SDK reports tool failures in-band (an isError result), not as a rejected
+// promise - rethrow them so tests can assert failures with .rejects.toThrow.
+async function callToolOrThrow(
+  client: Client,
+  params: { name: string; arguments: Record<string, unknown> },
+): Promise<CallToolResult> {
+  const result = (await client.callTool(params)) as CallToolResult;
+  if (result.isError) throw new Error((result.content[0] as { text: string }).text);
+  return result;
+}
+
 test('registers trading and data toolsets by default with object input schemas', async () => {
   const client = await connect();
   const { tools } = await client.listTools();
@@ -100,14 +111,9 @@ test('a query+body operation routes the query to the URL and the body to the req
 test('rejects arguments that fail the generated Zod schema', async () => {
   const client = await connect(['trading']);
   // getOrderByOrderID requires pathParams.order_id; omit it.
-  let rejected = false;
-  try {
-    const result = (await client.callTool({ name: 'alpaca_getOrderByOrderID', arguments: {} })) as CallToolResult;
-    rejected = result.isError === true;
-  } catch {
-    rejected = true; // SDK rejects invalid params with a JSON-RPC error
-  }
-  expect(rejected).toBe(true);
+  await expect(
+    callToolOrThrow(client, { name: 'alpaca_getOrderByOrderID', arguments: {} }),
+  ).rejects.toThrow('Invalid arguments for tool alpaca_getOrderByOrderID');
   await client.close();
 });
 
@@ -116,17 +122,12 @@ test('issueTokens rejects a non-conforming body via its generated form-body sche
   // (a permissive record would accept it) but fails the generated enum, proving
   // the precise IssueTokensBody schema is enforced.
   const client = await connect(['authx']);
-  let rejected = false;
-  try {
-    const result = (await client.callTool({
+  await expect(
+    callToolOrThrow(client, {
       name: 'alpaca_issueTokens',
       arguments: { bodyParams: { grant_type: 'password' } },
-    })) as CallToolResult;
-    rejected = result.isError === true;
-  } catch {
-    rejected = true; // SDK rejects invalid params with a JSON-RPC error
-  }
-  expect(rejected).toBe(true);
+    }),
+  ).rejects.toThrow('Invalid arguments for tool alpaca_issueTokens');
   await client.close();
 });
 
