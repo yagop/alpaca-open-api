@@ -15,7 +15,10 @@
  *
  * The earlier query+body arg-order quirk (and optional bodies typed as required)
  * was fixed upstream in `@orval/mcp` (orval PR #3600), released in orval 8.18.0,
- * so no post-gen swap is needed.
+ * so no post-gen swap is needed. Likewise, form-encoded request bodies get a real
+ * `<Op>Body` Zod schema since orval 8.20.0 (orval issue #3664), so the permissive
+ * `z.record` fallback (and its cast) for `issueTokens` is gone - every op with
+ * args must have generated Zod, enforced below.
  */
 
 import {
@@ -40,9 +43,9 @@ const pascal = (s: string): string => s.charAt(0).toUpperCase() + s.slice(1);
 /**
  * Emit `register.ts` for one API by reading the generated `handlers.ts` and
  * `tool-schemas.zod.ts`: one `server.registerTool` call per `<op>Handler`, paired
- * with its Zod input (`<Op>Params`/`<Op>QueryParams`/`<Op>Body`). Operations whose
- * handler takes args but have no generated Zod (form-encoded bodies) get a
- * permissive `z.record` body and are cast to the handler's own arg type.
+ * with its Zod input (`<Op>Params`/`<Op>QueryParams`/`<Op>Body`). A handler that
+ * takes args but has no generated Zod is a hard error: it would mean a spec or
+ * generator gap that silently loses input validation.
  */
 const generateRegister = (api: string, apiDir: string): void => {
   const handlersSrc = readFileSync(join(apiDir, 'handlers.ts'), 'utf8');
@@ -51,7 +54,6 @@ const generateRegister = (api: string, apiDir: string): void => {
     [...zodSrc.matchAll(/export const (\w+) =/g)].map((m) => m[1]),
   );
 
-  let usesZod = false;
   let usesSchemas = false;
   const calls: string[] = [];
 
@@ -75,23 +77,18 @@ const generateRegister = (api: string, apiDir: string): void => {
       parts.push(`queryParams: schemas.${P}QueryParams`);
     if (zodExports.has(`${P}Body`)) parts.push(`bodyParams: schemas.${P}Body`);
 
-    if (parts.length > 0) {
-      usesSchemas = true;
-      calls.push(
-        `  server.registerTool(${head}, inputSchema: { ${parts.join(', ')} } }, async (args) => ctx.strip('${op}', await handlers.${op}Handler(args)));`,
+    if (parts.length === 0)
+      throw new Error(
+        `postgen: ${api}/${op} handler takes args but tool-schemas.zod.ts exports none of ${P}Params/${P}QueryParams/${P}Body - spec or generator gap, refusing to register it unvalidated`,
       );
-    } else {
-      // Form-encoded body with no generated Zod: validate permissively, then cast
-      // the validated args to the handler's own parameter type.
-      usesZod = true;
-      calls.push(
-        `  server.registerTool(${head}, inputSchema: { bodyParams: z.record(z.string(), z.string()) } }, async (args) => ctx.strip('${op}', await handlers.${op}Handler(args as unknown as Parameters<typeof handlers.${op}Handler>[0])));`,
-      );
-    }
+
+    usesSchemas = true;
+    calls.push(
+      `  server.registerTool(${head}, inputSchema: { ${parts.join(', ')} } }, async (args) => ctx.strip('${op}', await handlers.${op}Handler(args)));`,
+    );
   }
 
   const imports = [
-    usesZod ? `import { z } from 'zod';` : '',
     `import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';`,
     `import type { RegisterContext } from '../../registry';`,
     `import * as handlers from './handlers';`,
