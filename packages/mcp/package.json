@@ -41,7 +41,7 @@
     "zod": "^4.4.3"
   },
   "devDependencies": {
-    "@alpaca-open-api/core": "1.0.2"
+    "@alpaca-open-api/core": "workspace:*"
   },
   "engines": {
     "node": ">=18.0.0"
