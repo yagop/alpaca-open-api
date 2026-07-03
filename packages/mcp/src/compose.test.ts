@@ -111,6 +111,26 @@ test('rejects arguments that fail the generated Zod schema', async () => {
   await client.close();
 });
 
+test('issueTokens rejects a non-conforming body via its generated form-body schema', async () => {
+  // Since orval 8.20.0 the form-encoded issueTokens body has a real generated
+  // Zod schema (IssueTokensBody) instead of a permissive z.record fallback.
+  // `grant_type: 'password'` is a string - the old fallback accepted it - but
+  // fails the generated enum, proving the precise schema is enforced.
+  const client = await connect(['authx']);
+  let rejected = false;
+  try {
+    const result = (await client.callTool({
+      name: 'alpaca_issueTokens',
+      arguments: { bodyParams: { grant_type: 'password' } },
+    })) as CallToolResult;
+    rejected = result.isError === true;
+  } catch {
+    rejected = true; // SDK rejects invalid params with a JSON-RPC error
+  }
+  expect(rejected).toBe(true);
+  await client.close();
+});
+
 test('wraps the news tool output in a trust-boundary envelope (untrusted free text)', async () => {
   // `news` returns externally-authored free text, so its payload is re-framed as
   // untrusted data the model must not treat as instructions. fetch is stubbed to
