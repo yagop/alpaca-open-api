@@ -68,10 +68,10 @@ So to add/rename/change a tool: change the OpenAPI spec or `orval.config.ts` and
 
 ### Design note: why generated static registration
 
-The registration intentionally avoids reflecting over module exports (which erases each handler's per-op types and forces `any`/casts). Generating one concrete `server.registerTool` call per op keeps every registration type-checked. The only cast in the whole generated surface is a single documented `as unknown as` for `issueTokens` (form-encoded body with no generated Zod). `compose.ts` and `registry.ts` are hand-written and must stay free of `any`/casts.
+The registration intentionally avoids reflecting over module exports (which erases each handler's per-op types and forces `any`/casts). Generating one concrete `server.registerTool` call per op keeps every registration type-checked. The generated surface is entirely cast-free: every op whose handler takes args has a generated Zod input schema (since orval 8.20.0 that includes form-encoded bodies like `issueTokens`), and `postgen.ts` fails hard if one is missing. `compose.ts` and `registry.ts` are hand-written and must stay free of `any`/casts.
 
-## @orval/mcp argument order (fixed upstream)
+## @orval/mcp quirks (fixed upstream)
 
-`@orval/mcp` once emitted MCP handler query/body arguments in the wrong **order** and typed optional request bodies as required. We carried orval PR #3600 as a local patch against `@orval/mcp@8.17.0`; that fix shipped in **orval 8.18.0**, so the patch and its `patchedDependencies` entry are gone and we depend on `orval@^8.18.0` directly.
+`@orval/mcp` once emitted MCP handler query/body arguments in the wrong **order** and typed optional request bodies as required. We carried orval PR #3600 as a local patch against `@orval/mcp@8.17.0`; that fix shipped in **orval 8.18.0**, so the patch and its `patchedDependencies` entry are gone. It also generated **no Zod schema for `application/x-www-form-urlencoded` request bodies** (orval issue #3664), which forced a permissive `z.record` inputSchema plus an `as unknown as` cast for `issueTokens`; that shipped in **orval 8.20.0**, so the fallback is gone and we depend on `orval@^8.20.0` directly.
 
-Because the fix is upstream, `postgen.ts` does **not** swap argument order - do not reintroduce that swap.
+Because both fixes are upstream, `postgen.ts` does **not** swap argument order and has no form-body fallback - do not reintroduce either.
