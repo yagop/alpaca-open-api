@@ -85,3 +85,35 @@ Do the bump in an **isolated worktree** so the user's checkout is untouched:
    which should detect the already-bumped versions and continue from the tagging step.
    If the PR is **closed without merging**, abort and report.
 7. After merge, clean up: `git worktree remove "$WT"` and delete the local branch.
+
+## 3. Tag & publish
+
+1. Fetch and verify the bump landed on main:
+   ```
+   git fetch origin main
+   git show origin/main:packages/core/package.json | grep '"version"'
+   ```
+   Both packages (and the root) must read `<version>` — if not, the bump PR didn't merge
+   cleanly; stop and report.
+2. Tag the merged main and push **only that tag** (never push branches here):
+   ```
+   git tag v<version> origin/main
+   git push origin v<version>
+   ```
+   If the tag already exists locally or remotely pointing at the same commit, that's a resume —
+   continue; if it points elsewhere, stop and report rather than moving it.
+3. The push triggers `.github/workflows/release.yml`, which checks the tag is on main, builds,
+   tests, verifies the tag matches both package versions, and publishes both packages to npm.
+   Watch it:
+   ```
+   gh run list --workflow release.yml --limit 1   # get the run id for the tag
+   gh run watch <run-id> --exit-status
+   ```
+4. If the run **fails**, read `gh run view <run-id> --log-failed` and report the cause. Do not
+   delete or move the tag; the workflow's publish steps are re-runnable (`gh run rerun`) once
+   the cause is fixed. A version-mismatch failure means step 2 of the flow was skipped.
+5. Confirm both packages are live:
+   ```
+   npm view "@alpaca-open-api/core@<version>" version
+   npm view "@alpaca-open-api/mcp@<version>" version
+   ```
