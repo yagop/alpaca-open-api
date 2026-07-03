@@ -13,20 +13,20 @@
     },
     "packages/core": {
       "name": "@alpaca-open-api/core",
-      "version": "1.0.1",
+      "version": "1.0.2",
     },
     "packages/mcp": {
       "name": "@alpaca-open-api/mcp",
-      "version": "1.0.1",
+      "version": "1.0.2",
       "bin": {
-        "alpaca-mcp": "./dist/mcp.js",
+        "alpaca-mcp": "dist/mcp.js",
       },
       "dependencies": {
         "@modelcontextprotocol/sdk": "^1.29.0",
         "zod": "^4.4.3",
       },
       "devDependencies": {
-        "@alpaca-open-api/core": "0.1.0",
+        "@alpaca-open-api/core": "1.0.2",
       },
     },
   },
