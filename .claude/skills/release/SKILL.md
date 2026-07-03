@@ -117,3 +117,17 @@ Do the bump in an **isolated worktree** so the user's checkout is untouched:
    npm view "@alpaca-open-api/core@<version>" version
    npm view "@alpaca-open-api/mcp@<version>" version
    ```
+
+## 4. Finalize the Release
+
+1. Publish the draft Release so it attaches to the pushed tag:
+   ```
+   gh release edit v<version> --draft=false --latest
+   ```
+2. Append links to the published packages at the end of the release notes (keep the existing
+   changelog intact):
+   ```
+   - npm: [@alpaca-open-api/core@<version>](https://www.npmjs.com/package/@alpaca-open-api/core/v/<version>) · [@alpaca-open-api/mcp@<version>](https://www.npmjs.com/package/@alpaca-open-api/mcp/v/<version>)
+   ```
+   (`gh release view v<version> --json body`, append, then `gh release edit v<version> --notes-file …`.)
+3. Report to the user: the Release URL, the tag, and both npm version links.
