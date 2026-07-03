@@ -54,6 +54,11 @@ jobs:
       - name: Build all packages (generates code + bundles; generated/ is git-ignored)
         run: bun run build
 
+      # mcp's build is a type-erasing `bun build` bundle and the code is regenerated
+      # from the remote specs above, so typecheck it here like ci.yml does.
+      - name: Type check (mcp)
+        run: bun x tsc --noEmit -p packages/mcp/tsconfig.json
+
       - name: Unit tests
         run: bun test
 
