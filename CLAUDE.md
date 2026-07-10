@@ -39,9 +39,17 @@ Almost all code is generated. `packages/core/src/generated/` and `packages/mcp/s
 Every call - MCP tools and core clients alike - routes through a tiny mutator that resolves host + auth per API:
 
 - `packages/core/src/api-routing.ts` - `API_ROUTING`: per-API `{ live, paper|sandbox }` base URLs + auth strategy.
-- `packages/core/src/mutator.ts` (and `packages/mcp/src/mutator.ts`) - picks the host from `ALPACA_ENV` (`isPaper()`), sets `APCA-API-KEY-ID` / `APCA-API-SECRET-KEY` from `ALPACA_API_KEY`/`ALPACA_API_SECRET`. Exported as `tradingMutator`/`dataMutator`/`brokerMutator`/`authxMutator` and `makeMutator`. `mutator.test.ts` covers it.
+- `packages/core/src/mutator.ts` (and `packages/mcp/src/mutator.ts`) - resolves credentials per call via `currentCreds()`, then picks the host (`resolveHost`) and sets `APCA-API-KEY-ID` / `APCA-API-SECRET-KEY` (`authHeaders`). Exported as `tradingMutator`/`dataMutator`/`brokerMutator`/`authxMutator` and `makeMutator`. `mutator.test.ts` covers it.
+- `packages/core/src/request-context.ts` - `reqCtx`, an `AsyncLocalStorage<Creds>`. `currentCreds()` reads it when set (remote/http mode), else falls back to `ALPACA_API_KEY`/`ALPACA_API_SECRET`/`ALPACA_ENV` (stdio mode). **No env fallback inside a request** - a credential-less http request is rejected at the transport, never served with the server's keys.
 
-`ALPACA_ENV` defaults to **`live`** (real money/orders). Live and paper API keys differ. See README for the full env table (`ALPACA_API_KEY`, `ALPACA_API_SECRET`, `ALPACA_ENV`, `ALPACA_TOOLSETS`, per-API `*_URL` overrides).
+`ALPACA_ENV` defaults to **`live`** (real money/orders). Live and paper API keys differ. See README for the full env table (`ALPACA_API_KEY`, `ALPACA_API_SECRET`, `ALPACA_ENV`, `ALPACA_TOOLSETS`, `ALPACA_TRANSPORT`, per-API `*_URL` overrides).
+
+### Transports: stdio (default) and streamable-http
+
+`packages/mcp/src/mcp.ts` selects the transport from `--transport` / `ALPACA_TRANSPORT` (default `stdio`):
+
+- **stdio** - single-tenant; credentials come from the process env (the OS process boundary is the trust boundary).
+- **streamable-http** (`--transport http`) - `packages/mcp/src/http.ts`. Multi-tenant pass-through proxy: a fresh stateless `buildServer` + `StreamableHTTPServerTransport` per request, each handled inside `reqCtx.run(creds, ...)` with `creds` read from the `APCA-API-KEY-ID` / `APCA-API-SECRET-KEY` / `X-Alpaca-Env` headers. Credential-less requests get 401 (no env fallback); auth headers are never logged. `http.test.ts` drives it over real HTTP with raw `fetch` (the SDK client mis-handles the 202 notification under Bun).
 
 ## How MCP tools (methods) are registered
 

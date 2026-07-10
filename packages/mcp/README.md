@@ -55,12 +55,43 @@ claude mcp add alpaca \
 
 | Variable | Required | Default | Purpose |
 | --- | :---: | --- | --- |
-| `ALPACA_API_KEY` | ✅ | — | API key (live and paper keys are different) |
-| `ALPACA_API_SECRET` | ✅ | — | API secret |
+| `ALPACA_API_KEY` | ✅ (stdio) | — | API key (live and paper keys are different) |
+| `ALPACA_API_SECRET` | ✅ (stdio) | — | API secret |
 | `ALPACA_ENV` | | `live` | `paper` or `live` |
 | `ALPACA_TOOLSETS` | | `trading,data` | Comma-separated subset to expose: `trading,data,broker,authx` (all four = ~273 tools) |
+| `ALPACA_TRANSPORT` | | `stdio` | `stdio` or `http` (also `--transport`); see [Remote mode](#remote-mode-streamable-http) |
+| `ALPACA_HTTP_PORT` / `ALPACA_HTTP_HOST` / `ALPACA_HTTP_PATH` | | `3000` / `127.0.0.1` / `/mcp` | Listen address for the `http` transport |
 
 > ⚠️ The server **defaults to `live`** and allows order placement in the default `trading` toolset. Use `ALPACA_ENV=paper` with your paper keys while you experiment. Live and paper API keys differ.
+
+## Remote mode (streamable-http)
+
+By default the server runs on **stdio** and reads one set of credentials from the
+environment — correct for a local agent, where the process boundary is the trust
+boundary. To host it remotely, start the optional **streamable-http** transport:
+
+```bash
+npx @alpaca-open-api/mcp --transport http   # or ALPACA_TRANSPORT=http
+```
+
+In this mode the server holds **no credentials of its own** and is a pure
+pass-through proxy: every request carries its own Alpaca keys in headers, and
+possession of valid keys *is* the authorization.
+
+| Header | Purpose |
+| --- | --- |
+| `APCA-API-KEY-ID` | Alpaca API key (required) |
+| `APCA-API-SECRET-KEY` | Alpaca API secret (required) |
+| `X-Alpaca-Env` | `paper` or `live` (default `live`) |
+
+Credential-less requests are **rejected** — there is no environment fallback, so an
+open endpoint can never borrow the server's keys. `ALPACA_API_KEY` / `ALPACA_API_SECRET`
+are ignored in http mode. The server binds to loopback (`127.0.0.1`) by default; put a
+TLS-terminating reverse proxy in front of it before exposing it publicly, and never log
+the credential headers.
+
+> AuthX is the one asymmetry: its `oauth/token` flow carries credentials in the
+> form-encoded request body rather than headers, so those are passed through as-is.
 
 ## Documentation
 
