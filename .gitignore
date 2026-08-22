@@ -92,8 +92,9 @@ dist
 # vuepress build output
 .vuepress/dist
 
-# vuepress v2.x temp directory
+# vuepress v2.x temp and cache directory
 .temp
+.cache
 
 # Sveltekit cache directory
 .svelte-kit/
@@ -147,10 +148,12 @@ vite.config.ts.timestamp-*
 
 # Generated from the OpenAPI specs (run `bun run generate`)
 packages/core/src/generated/
-packages/mcp/src/generated/
 
 # Bun
 bun.lockb
 
 # npm lock file (we use bun)
 package-lock.json
+
+# Generated from the OpenAPI specs by Orval
+packages/mcp/src/generated/
