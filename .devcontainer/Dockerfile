@@ -3,10 +3,14 @@ FROM ubuntu:26.04
 
 ARG DEBIAN_FRONTEND=noninteractive
 
+RUN rm -f /etc/dpkg/dpkg.cfg.d/excludes
+
 # Install dependencies
 RUN apt-get update && apt-get install -y \
     curl \
     unzip \
+    dpkg \
+    jq \
     ca-certificates \
     git \
     && rm -rf /var/lib/apt/lists/*
