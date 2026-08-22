@@ -3,9 +3,6 @@
   "build": {
     "dockerfile": "Dockerfile"
   },
-  "containerEnv": {
-    "SSH_AUTH_SOCK": "/ssh-agent"
-  },
   "customizations": {
     "vscode": {
       "extensions": [
