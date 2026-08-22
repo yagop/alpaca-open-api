@@ -16,29 +16,57 @@
  *   ALPACA_ENV = paper | live            (default: live)
  *   ALPACA_TOOLSETS = trading,data,...    (optional: restrict registered toolsets; default: trading,data)
  *   ALPACA_{TRADING,DATA,BROKER,AUTHX}_URL  (optional per-API base-URL overrides)
+ *
+ * By default it speaks stdio; `--http` (or `SERVER_HTTP=1`) serves the MCP
+ * Streamable-HTTP transport instead (see `./http.ts`), configured via
+ * `SERVER_PORT` / `SERVER_HOST` and guarded by `SERVER_HTTP_TOKEN` (bearer auth).
  */
 
+import { parseArgs } from 'node:util';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import { buildServer } from './compose';
+import { startHttpServer } from './http';
 import { version } from '../package.json';
 
-const argv = process.argv.slice(2);
-if (argv.includes('--help') || argv.includes('-h')) {
+const { values: args } = parseArgs({
+  options: {
+    help: { type: 'boolean', short: 'h' },
+    version: { type: 'boolean', short: 'v' },
+    http: { type: 'boolean' },
+    port: { type: 'string' },
+    host: { type: 'string' },
+    token: { type: 'string' },
+  },
+  strict: true,
+  allowPositionals: false,
+});
+
+if (args.help) {
   process.stdout.write(
     `alpaca-mcp - MCP server for the Alpaca Markets API\n\n` +
       `Registers every Alpaca endpoint as an \`alpaca_<operationId>\` tool.\n\n` +
       `Usage:\n` +
-      `  npx @alpaca-open-api/mcp        Start the server on stdio (for MCP clients)\n\n` +
+      `  npx @alpaca-open-api/mcp             Start the server on stdio (for MCP clients)\n` +
+      `  npx @alpaca-open-api/mcp --http     Start a Streamable-HTTP server instead\n\n` +
+      `Options:\n` +
+      `  --http                  Serve the Streamable-HTTP transport (default: stdio)\n` +
+      `  --port <n>              HTTP port (default: 3000, or SERVER_PORT)\n` +
+      `  --host <addr>           HTTP bind address (default: 127.0.0.1, or SERVER_HOST)\n` +
+      `  --token <secret>        Require an "Authorization: Bearer <secret>" header (or SERVER_HTTP_TOKEN)\n\n` +
       `Environment:\n` +
       `  ALPACA_API_KEY          (required)  API key (live and paper keys differ)\n` +
       `  ALPACA_API_SECRET       (required)  API secret\n` +
       `  ALPACA_ENV              paper|live  (default: live)\n` +
       `  ALPACA_TOOLSETS         csv         restrict to a subset: trading,data,broker,authx (default: trading,data)\n` +
+      `  SERVER_HTTP             1|true      serve over HTTP instead of stdio (same as --http)\n` +
+      `  SERVER_PORT             number      HTTP port (default: 3000)\n` +
+      `  SERVER_HOST             addr        HTTP bind address (default: 127.0.0.1)\n` +
+      `  SERVER_HTTP_TOKEN       secret      require a bearer token; mandatory to bind a non-loopback host\n` +
       `  ALPACA_{TRADING,DATA,BROKER,AUTHX}_URL   per-API base-URL overrides\n`
   );
   process.exit(0);
 }
-if (argv.includes('--version') || argv.includes('-v')) {
+if (args.version) {
   process.stdout.write(`${version}\n`);
   process.exit(0);
 }
@@ -58,9 +86,55 @@ const enabledToolsets = toolsetsEnv
       .filter(Boolean)
   : undefined;
 
-const { server, count } = buildServer(enabledToolsets);
-await server.connect(new StdioServerTransport());
-process.stderr.write(
-  `alpaca-api MCP server ready - ${count} tools registered` +
-    `${enabledToolsets?.length ? ` (toolsets: ${enabledToolsets.join(', ')})` : ''}.\n`
-);
+const toolsetNote = enabledToolsets?.length
+  ? ` (toolsets: ${enabledToolsets.join(', ')})`
+  : '';
+
+const httpEnv = process.env.SERVER_HTTP?.trim().toLowerCase();
+const useHttp = args.http || httpEnv === '1' || httpEnv === 'true';
+
+const LOOPBACK_HOSTS = new Set(['127.0.0.1', '::1', 'localhost']);
+
+if (useHttp) {
+  // `?.trim() || undefined` so a set-but-empty env var (e.g. SERVER_PORT="")
+  // falls back to the default instead of parsing to 0 / an empty host.
+  const portRaw = (args.port ?? process.env.SERVER_PORT)?.trim() || undefined;
+  const port = portRaw === undefined ? 3000 : Number(portRaw);
+  const hostname = (args.host ?? process.env.SERVER_HOST)?.trim() || '127.0.0.1';
+  const token = (args.token ?? process.env.SERVER_HTTP_TOKEN)?.trim() || undefined;
+  if (!Number.isInteger(port) || port < 1 || port > 65535) {
+    process.stderr.write(`Invalid port: ${portRaw}\n`);
+    process.exit(1);
+  }
+  // Refuse to expose the keys-bearing endpoint beyond loopback with no auth.
+  if (!token && !LOOPBACK_HOSTS.has(hostname)) {
+    process.stderr.write(
+      `Refusing to bind ${hostname} without authentication. ` +
+        `Set SERVER_HTTP_TOKEN (or --token) to require a bearer token, ` +
+        `or bind a loopback host (127.0.0.1).\n`
+    );
+    process.exit(1);
+  }
+  // Sessions are built per-connection inside http.ts; report the default surface.
+  const { count } = buildServer(enabledToolsets);
+  const httpServer = startHttpServer({ port, hostname, enabledToolsets, token });
+  // listen() is async: only claim readiness once the socket is actually bound,
+  // and surface bind failures (EADDRINUSE, EACCES) instead of crashing unhandled.
+  httpServer.on('error', (err) => {
+    process.stderr.write(`Failed to start HTTP server: ${err.message}\n`);
+    process.exit(1);
+  });
+  httpServer.on('listening', () => {
+    process.stderr.write(
+      `alpaca-api MCP server ready on http://${hostname}:${port}/mcp - ` +
+        `${count} tools per session${toolsetNote}` +
+        `${token ? ', bearer auth required' : ''}.\n`
+    );
+  });
+} else {
+  const { server, count } = buildServer(enabledToolsets);
+  await server.connect(new StdioServerTransport());
+  process.stderr.write(
+    `alpaca-api MCP server ready - ${count} tools registered${toolsetNote}.\n`
+  );
+}

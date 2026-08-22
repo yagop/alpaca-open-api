@@ -62,7 +62,7 @@ This is the central flow of `@alpaca-open-api/mcp`. Tools are **not** registered
    - `describe(op)` -> the tool description.
    - `strip(result)` -> removes `structuredContent` (our tools declare no `outputSchema`).
 
-4. **`packages/mcp/src/mcp.ts`** (the bin) - reads env (`ALPACA_TOOLSETS`, default `trading,data`), calls `buildServer`, and connects `StdioServerTransport`.
+4. **`packages/mcp/src/mcp.ts`** (the bin) - reads env (`ALPACA_TOOLSETS`, default `trading,data`), calls `buildServer`, and connects `StdioServerTransport`. With `--http` (or `SERVER_HTTP=1`) it instead serves the MCP Streamable-HTTP transport via `packages/mcp/src/http.ts` (per-session `buildServer` over `node:http`, endpoint `/mcp`; `SERVER_PORT`/`SERVER_HOST`). Optional bearer auth via `SERVER_HTTP_TOKEN` (or `--token`); binding a non-loopback host without a token is refused.
 
 So to add/rename/change a tool: change the OpenAPI spec or `orval.config.ts` and `bun run generate` - never edit a generated `register.ts`/`handlers.ts`. The default toolset (`trading,data`) is ~101 tools; all four (`trading,data,broker,authx`) is ~256. `compose.test.ts` pins those counts, the `alpaca_*` naming, argument ordering, and Zod rejection - keep it green when touching the pipeline.
 
