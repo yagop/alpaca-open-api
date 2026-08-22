@@ -6,16 +6,10 @@
   "customizations": {
     "vscode": {
       "extensions": [
-        "dbaeumer.vscode-eslint",
-        "esbenp.prettier-vscode",
-        "oven.bun-vscode"
       ],
       "settings": {
-        "editor.formatOnSave": true,
-        "editor.defaultFormatter": "esbenp.prettier-vscode"
       }
     }
   },
-  "postCreateCommand": "bun install",
   "remoteUser": "root"
 }
