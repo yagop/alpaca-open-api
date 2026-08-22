@@ -64,7 +64,7 @@ This is the central flow of `@alpaca-open-api/mcp`. Tools are **not** registered
 
 4. **`packages/mcp/src/mcp.ts`** (the bin) - reads env (`ALPACA_TOOLSETS`, default `trading,data`), calls `buildServer`, and connects `StdioServerTransport`.
 
-So to add/rename/change a tool: change the OpenAPI spec or `orval.config.ts` and `bun run generate` - never edit a generated `register.ts`/`handlers.ts`. The default toolset (`trading,data`) is ~114 tools; all four (`trading,data,broker,authx`) is ~269. `compose.test.ts` pins those counts, the `alpaca_*` naming, argument ordering, and Zod rejection - keep it green when touching the pipeline.
+So to add/rename/change a tool: change the OpenAPI spec or `orval.config.ts` and `bun run generate` - never edit a generated `register.ts`/`handlers.ts`. The default toolset (`trading,data`) is ~101 tools; all four (`trading,data,broker,authx`) is ~256. `compose.test.ts` pins those counts, the `alpaca_*` naming, argument ordering, and Zod rejection - keep it green when touching the pipeline.
 
 ### Design note: why generated static registration
 
