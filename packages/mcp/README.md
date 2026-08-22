@@ -51,6 +51,41 @@ claude mcp add alpaca \
 }
 ```
 
+### Run over HTTP
+
+By default the server speaks **stdio**. Pass `--http` to serve the MCP
+[Streamable HTTP](https://modelcontextprotocol.io/specification/basic/transports)
+transport instead — useful for remote or multi-client setups:
+
+```bash
+npx -y @alpaca-open-api/mcp --http --port 3000
+```
+
+The MCP endpoint is served at `http://<host>:<port>/mcp`; each client gets its
+own session (via the `mcp-session-id` header). Point an HTTP-capable MCP client
+at that URL. The server binds `127.0.0.1` by default.
+
+#### Authentication
+
+The HTTP endpoint fronts your Alpaca keys, so protect it before exposing it.
+Set `SERVER_HTTP_TOKEN` (or `--token`) to require a bearer token on every
+request:
+
+```bash
+SERVER_HTTP_TOKEN=$(openssl rand -hex 32) \
+  npx -y @alpaca-open-api/mcp --http --host 0.0.0.0 --port 3000
+```
+
+Clients must then send `Authorization: Bearer <token>`; anything else gets `401`.
+As a safety net, the server **refuses to bind a non-loopback host** (anything but
+`127.0.0.1`/`::1`/`localhost`) unless a token is set — so you can't accidentally
+publish an unauthenticated, keys-bearing endpoint.
+
+```bash
+claude mcp add --transport http alpaca http://your-host:3000/mcp \
+  --header "Authorization: Bearer $SERVER_HTTP_TOKEN"
+```
+
 ## Configuration
 
 | Variable | Required | Default | Purpose |
@@ -59,6 +94,10 @@ claude mcp add alpaca \
 | `ALPACA_API_SECRET` | ✅ | — | API secret |
 | `ALPACA_ENV` | | `live` | `paper` or `live` |
 | `ALPACA_TOOLSETS` | | `trading,data` | Comma-separated subset to expose: `trading,data,broker,authx` (all four = ~256 tools) |
+| `SERVER_HTTP` | | — | `1`/`true` to serve over HTTP instead of stdio (same as `--http`) |
+| `SERVER_PORT` | | `3000` | HTTP port (with `--http`) |
+| `SERVER_HOST` | | `127.0.0.1` | HTTP bind address (with `--http`) |
+| `SERVER_HTTP_TOKEN` | | — | Bearer token required on every HTTP request; **mandatory** to bind a non-loopback host |
 
 > ⚠️ The server **defaults to `live`** and allows order placement in the default `trading` toolset. Use `ALPACA_ENV=paper` with your paper keys while you experiment. Live and paper API keys differ.
 
