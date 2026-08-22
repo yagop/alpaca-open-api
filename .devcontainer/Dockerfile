@@ -1,5 +1,7 @@
 # Use Debian as base image
-FROM debian:bookworm-slim
+FROM ubuntu:26.04
+
+ARG DEBIAN_FRONTEND=noninteractive
 
 # Install dependencies
 RUN apt-get update && apt-get install -y \
@@ -10,13 +12,17 @@ RUN apt-get update && apt-get install -y \
     && rm -rf /var/lib/apt/lists/*
 
 # Install Bun
-RUN curl -fsSL https://bun.sh/install | bash
-
-# Add Bun to PATH
-ENV PATH="/root/.bun/bin:${PATH}"
-
-# Set working directory
-WORKDIR /workspace
-
-# Verify Bun installation
-RUN bun --version
+RUN set -eu; \
+    case "$(dpkg --print-architecture)" in \
+        amd64) bun_arch=x64 ;; \
+        arm64) bun_arch=aarch64 ;; \
+        *) echo "unsupported arch for bun" >&2; exit 1 ;; \
+    esac; \
+    url="$(curl -fsSL https://api.github.com/repos/oven-sh/bun/releases/latest \
+        | jq -r --arg n "bun-linux-${bun_arch}.zip" '.assets[] | select(.name==$n) | .browser_download_url')"; \
+    test -n "$url"; \
+    curl -fsSL "$url" -o /tmp/bun.zip; \
+    unzip -q /tmp/bun.zip -d /tmp/bun; \
+    install -m 0755 "/tmp/bun/bun-linux-${bun_arch}/bun" /usr/local/bin/bun; \
+    rm -rf /tmp/bun /tmp/bun.zip; \
+    bun --version
