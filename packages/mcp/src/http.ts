@@ -1,7 +1,7 @@
 /**
  * Streamable-HTTP transport for the Alpaca MCP server.
  *
- * The bin (`mcp.ts`) speaks stdio by default; passing `--http` (or `ALPACA_HTTP=1`)
+ * The bin (`mcp.ts`) speaks stdio by default; passing `--http` (or `SERVER_HTTP=1`)
  * runs this instead, serving the MCP "Streamable HTTP" transport over plain
  * `node:http` so it works under both Node (`npx @alpaca-open-api/mcp`) and Bun.
  *

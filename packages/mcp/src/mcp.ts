@@ -96,11 +96,13 @@ const useHttp = args.http || httpEnv === '1' || httpEnv === 'true';
 const LOOPBACK_HOSTS = new Set(['127.0.0.1', '::1', 'localhost']);
 
 if (useHttp) {
-  const portRaw = args.port ?? process.env.SERVER_PORT;
-  const port = Number(portRaw ?? 3000);
-  const hostname = args.host ?? process.env.SERVER_HOST ?? '127.0.0.1';
+  // `?.trim() || undefined` so a set-but-empty env var (e.g. SERVER_PORT="")
+  // falls back to the default instead of parsing to 0 / an empty host.
+  const portRaw = (args.port ?? process.env.SERVER_PORT)?.trim() || undefined;
+  const port = portRaw === undefined ? 3000 : Number(portRaw);
+  const hostname = (args.host ?? process.env.SERVER_HOST)?.trim() || '127.0.0.1';
   const token = (args.token ?? process.env.SERVER_HTTP_TOKEN)?.trim() || undefined;
-  if (!Number.isInteger(port) || port < 0 || port > 65535) {
+  if (!Number.isInteger(port) || port < 1 || port > 65535) {
     process.stderr.write(`Invalid port: ${portRaw}\n`);
     process.exit(1);
   }
@@ -115,12 +117,20 @@ if (useHttp) {
   }
   // Sessions are built per-connection inside http.ts; report the default surface.
   const { count } = buildServer(enabledToolsets);
-  startHttpServer({ port, hostname, enabledToolsets, token });
-  process.stderr.write(
-    `alpaca-api MCP server ready on http://${hostname}:${port}/mcp - ` +
-      `${count} tools per session${toolsetNote}` +
-      `${token ? ', bearer auth required' : ''}.\n`
-  );
+  const httpServer = startHttpServer({ port, hostname, enabledToolsets, token });
+  // listen() is async: only claim readiness once the socket is actually bound,
+  // and surface bind failures (EADDRINUSE, EACCES) instead of crashing unhandled.
+  httpServer.on('error', (err) => {
+    process.stderr.write(`Failed to start HTTP server: ${err.message}\n`);
+    process.exit(1);
+  });
+  httpServer.on('listening', () => {
+    process.stderr.write(
+      `alpaca-api MCP server ready on http://${hostname}:${port}/mcp - ` +
+        `${count} tools per session${toolsetNote}` +
+        `${token ? ', bearer auth required' : ''}.\n`
+    );
+  });
 } else {
   const { server, count } = buildServer(enabledToolsets);
   await server.connect(new StdioServerTransport());
