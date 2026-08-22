@@ -14,8 +14,11 @@ RUN apt-get update && apt-get install -y \
     git \
     && rm -rf /var/lib/apt/lists/*
 
+WORKDIR /workspace
+
 # Install Bun
-RUN set -eu; \
+SHELL ["/bin/bash", "-c"]
+RUN set -euo pipefail; \
     case "$(dpkg --print-architecture)" in \
         amd64) bun_arch=x64 ;; \
         arm64) bun_arch=aarch64 ;; \

@@ -8,10 +8,8 @@
       "extensions": [
       ],
       "settings": {
-        "editor.formatOnSave": true
       }
     }
   },
-  "postCreateCommand": "bun install",
   "remoteUser": "root"
 }
