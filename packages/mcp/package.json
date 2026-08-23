@@ -1,6 +1,6 @@
 {
   "name": "@alpaca-open-api/mcp",
-  "version": "1.2.1",
+  "version": "1.2.2",
   "description": "Model Context Protocol (MCP) server for the Alpaca Markets API — exposes all Trading, Market Data, Broker, and AuthX endpoints to AI agents",
   "type": "module",
   "bin": {
